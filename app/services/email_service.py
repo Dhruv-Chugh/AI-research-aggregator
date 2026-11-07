@@ -15,7 +15,11 @@ from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import Any, Dict, List, Optional
+from dotenv import load_dotenv
 from pydantic import BaseModel, Field
+
+# Ensure environment variables from .env are loaded
+load_dotenv()
 
 logger = logging.getLogger("ai_news.services.email")
 
@@ -317,13 +321,28 @@ class EmailService:
         # Live SMTP delivery if requested and configured
         if send_live and self.has_credentials:
             try:
+                # Strip spaces if user pasted 16-character app password formatted as 'xxxx xxxx xxxx xxxx'
+                clean_password = self.smtp_password.replace(" ", "")
                 logger.info("Connecting to SMTP server: %s:%d...", self.smtp_host, self.smtp_port)
-                with smtplib.SMTP(self.smtp_host, self.smtp_port, timeout=15) as server:
+
+                if self.smtp_port == 465:
+                    server = smtplib.SMTP_SSL(self.smtp_host, self.smtp_port, timeout=20)
+                else:
+                    server = smtplib.SMTP(self.smtp_host, self.smtp_port, timeout=20)
                     server.ehlo()
                     server.starttls()
                     server.ehlo()
-                    server.login(self.smtp_user, self.smtp_password)
+
+                try:
+                    server.login(self.smtp_user, clean_password)
                     server.send_message(msg)
+                    server.quit()
+                finally:
+                    try:
+                        server.close()
+                    except Exception:
+                        pass
+
                 logger.info("✅ Live email successfully sent to: %s with attachment %s", recipient_email, pdf_filename)
                 return EmailSendResult(
                     success=True,
@@ -336,8 +355,20 @@ class EmailService:
                     pdf_export_path=pdf_export_path,
                 )
             except Exception as e:
-                err_msg = f"SMTP dispatch failed: {e}"
-                logger.error(err_msg, exc_info=True)
+                err_str = str(e)
+                if "535" in err_str or "BadCredentials" in err_str or "Connection unexpectedly closed" in err_str:
+                    hint = (
+                        "\n💡 Note: Gmail requires a 16-character 'App Password' instead of your standard account password.\n"
+                        "To generate one in 30 seconds:\n"
+                        "1. Open https://myaccount.google.com/apppasswords\n"
+                        "2. Name it 'AI News Aggregator' and click Create.\n"
+                        "3. Copy the 16-character code (e.g. 'abcd efgh ijkl mnop') and update SMTP_PASSWORD in .env."
+                    )
+                    err_msg = f"SMTP authentication failed (Gmail BadCredentials): {e}.{hint}"
+                else:
+                    err_msg = f"SMTP dispatch failed: {e}"
+
+                logger.error(err_msg)
                 return EmailSendResult(
                     success=False,
                     recipient=recipient_email,

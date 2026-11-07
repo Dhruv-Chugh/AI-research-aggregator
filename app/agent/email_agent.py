@@ -12,8 +12,12 @@ import os
 import sys
 from datetime import date, datetime, timezone
 from typing import Any, Dict, List, Optional
+from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
+
+# Ensure environment variables from .env are loaded
+load_dotenv()
 
 from app.database.models import Subscriber, UserDigestRanking, utc_now
 from app.database.repository import NewsRepository
@@ -225,8 +229,8 @@ def main() -> None:
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        default=True,
-        help="Generate PDF and HTML briefing without sending live SMTP email (default: True)",
+        default=False,
+        help="Force dry run mode (save PDF and HTML locally without sending)",
     )
     parser.add_argument(
         "--export-dir",
