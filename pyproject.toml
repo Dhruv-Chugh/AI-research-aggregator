@@ -1,7 +1,7 @@
 [project]
-name = "axiom-dispatch"
+name = "ai-research-aggregator"
 version = "1.0.0"
-description = "Axiom Dispatch: Autonomous AI Technical Intelligence & IEEE Research Briefing Platform"
+description = "AI Research Intelligence Aggregator: Autonomous Technical Literature Synthesis & IEEE Briefing Platform"
 readme = "README.md"
 authors = [
     { name = "Dhruv Chugh", email = "dhruvchugh2007@gmail.com" }
@@ -30,10 +30,10 @@ dependencies = [
 ]
 
 [project.scripts]
-axiom-dispatch = "app.agent.email_agent:main"
-axiom-scraper = "app.scrapers.runner:main"
-axiom-ranker = "app.agent.ranking_agent:main"
-ai-news-aggregator = "app.scrapers.runner:main"
+ai-research-aggregator = "app.agent.email_agent:main"
+ai-briefing = "app.agent.email_agent:main"
+ai-ranker = "app.agent.ranking_agent:main"
+ai-scraper = "app.scrapers.runner:main"
 
 [build-system]
 requires = ["uv_build>=0.13.6,<0.14.0"]

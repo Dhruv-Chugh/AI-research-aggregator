@@ -1,7 +1,7 @@
 <div align="center">
 
-# ⚡ Axiom Dispatch
-### Autonomous AI Technical Intelligence & IEEE Research Briefing Platform
+# ⚡ AI Research Intelligence Aggregator
+### Autonomous AI Research Synthesis, Spoken Transcript Mining & IEEE Briefing Platform
 
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg?logo=python&logoColor=white)](https://www.python.org/)
 [![PostgreSQL 16](https://img.shields.io/badge/postgresql-16-336791.svg?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
@@ -18,9 +18,9 @@
 
 ## 📌 Executive Overview
 
-**Axiom Dispatch** transforms chaotic streams of AI research announcements and hours of technical videos into concise, publication-grade intelligence briefings. 
+**AI Research Intelligence Aggregator** transforms chaotic streams of AI research announcements and hours of technical videos into concise, publication-grade intelligence briefings. 
 
-Rather than producing generic summaries, Axiom Dispatch features a **Personalized User Interest Ranking Agent** that scores every piece of research against the subscriber's specific technical role, domain focus areas (e.g., *autonomous agents, inference scaling, foundation alignment*), and custom prioritization directives.
+Rather than producing generic summaries, the platform features a **Personalized User Interest Ranking Agent** that scores every piece of research against the subscriber's specific technical role, domain focus areas (e.g., *autonomous agents, inference scaling, foundation alignment*), and custom prioritization directives.
 
 Each morning, subscribers receive:
 1. **An IEEE Transactions–Styled Responsive Email**: Featuring formal Abstract & Index Terms, citation-indexed literature sections (`[A1]`, `[A2]`, `[B1]`), and zero marketing fluff.
@@ -233,7 +233,7 @@ uv run python -m app.database.init_db --seed
 
 ## 🐳 Production Container Deployment
 
-Axiom Dispatch is packaged with a lightweight multi-stage `Dockerfile` and `docker-compose.yml`:
+The platform is packaged with a lightweight multi-stage `Dockerfile` and `docker-compose.yml`:
 
 ```bash
 # Build and run PostgreSQL and the autonomous dispatch scheduler in the background
@@ -242,14 +242,14 @@ docker compose up --build -d
 
 View live execution logs:
 ```bash
-docker compose logs -f axiom-dispatch
+docker compose logs -f ai-aggregator
 ```
 
 ---
 
 ## 🧪 Automated Test Suite
 
-Axiom Dispatch includes 102 unit and integration tests covering scrapers, LLM clients, database repositories, ranking logic, PDF compilation, and email dispatching:
+The project includes 102 unit and integration tests covering scrapers, LLM clients, database repositories, ranking logic, PDF compilation, and email dispatching:
 
 ```bash
 # Run complete test suite
@@ -271,5 +271,5 @@ uv run pytest
 Distributed under the MIT License. See `LICENSE` for more information.
 
 <div align="center">
-<b>Axiom Dispatch</b> &bull; Built with precision for AI engineers, researchers, and systems architects.
+<b>AI Research Intelligence Aggregator</b> &bull; Built with precision for AI engineers, researchers, and systems architects.
 </div>

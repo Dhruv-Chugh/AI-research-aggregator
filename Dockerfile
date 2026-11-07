@@ -1,5 +1,5 @@
 # ==============================================================================
-# Axiom Dispatch - Production Container Image
+# AI Research Intelligence Aggregator - Production Container Image
 # Multi-stage, high-performance Python 3.12 runtime with uv package manager
 # ==============================================================================
 
