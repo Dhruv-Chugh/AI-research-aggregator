@@ -113,11 +113,12 @@ class EmailDeliveryAgent:
         top_item = min(featured, key=lambda x: x.rank_position) if featured else rankings[0]
         top_title = top_item.digest.title
 
-        # Synthesize Executive Summary text
+        # Synthesize Executive Summary text (Scholarly IEEE Memorandum standard)
         exec_summary = (
-            f"Today's intelligence dispatch for {sub_name} ({sub_role}) highlights empirical breakthroughs "
-            f"and strategic infrastructure moves, culminating in our Top Strategic Recommendation: '{top_title}'. "
-            f"Auxiliary and ecosystem news has been routed to the Ecosystem Radar to provide complete scannability."
+            f"This memorandum presents an empirical technical synthesis of recent advancements "
+            f"in foundation model architectures, reasoning systems, and agent orchestration across frontier research laboratories. "
+            f"Primary focus is directed toward '{top_title}', examining its architectural implications, "
+            f"empirical benchmarks, and systems scaling trade-offs, supplemented by broader ecosystem preprints and platform announcements."
         )
 
         # 1. Generate Publication-Grade Visual PDF (Ordered: radar first -> top pick last)

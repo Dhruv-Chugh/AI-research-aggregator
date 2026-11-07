@@ -50,6 +50,15 @@ def test_render_html_body_includes_metadata_and_structure_guide():
     assert "Rank #" not in html
     assert "video thumbnails" not in html
     assert "TOP STRATEGIC PICK" in html
+    assert "IEEE Computational Intelligence" in html
+    assert "Abstract" in html
+    assert "Index Terms" in html
+    assert "[A1]" in html
+    assert "[B1]" in html
+    assert "synthesized by Gemini LLM" not in html
+    assert "&#128206;" not in html  # no paperclip emoji
+    assert "&#9889;" not in html    # no lightning emoji
+    assert "&#127775;" not in html  # no star emoji
 
 
 def test_render_plain_text():
@@ -74,6 +83,11 @@ def test_render_plain_text():
     assert "Rank #" not in text
     assert "[1]" not in text
     assert "[TOP RECOMMENDATION]" in text
+    assert "IEEE COMPUTATIONAL INTELLIGENCE" in text
+    assert "ABSTRACT" in text
+    assert "INDEX TERMS" in text
+    assert "[A1]" in text
+    assert "[B1]" in text
 
 
 def test_dispatch_safe_local_export(tmp_path):

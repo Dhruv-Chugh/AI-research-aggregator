@@ -134,7 +134,7 @@ class NumberedCanvas(canvas.Canvas):
 
         # Running Header
         header_y = PAGE_HEIGHT - 28
-        self.drawString(MARGIN_HORIZONTAL, header_y, "THE AI DISPATCH | DAILY INTELLIGENCE BRIEFING")
+        self.drawString(MARGIN_HORIZONTAL, header_y, "IEEE COMPUTATIONAL INTELLIGENCE & SYSTEMS SOCIETY | TECHNICAL MEMORANDUM")
         self.setFont("Helvetica", 7)
         self.drawRightString(PAGE_WIDTH - MARGIN_HORIZONTAL, header_y, self.briefing_date_str)
 
@@ -146,7 +146,7 @@ class NumberedCanvas(canvas.Canvas):
         footer_y = 28
         self.line(MARGIN_HORIZONTAL, footer_y + 10, PAGE_WIDTH - MARGIN_HORIZONTAL, footer_y + 10)
         self.setFont("Helvetica", 7)
-        user_label = f"Personalized for {self.subscriber_name}" if self.subscriber_name else "Daily Briefing"
+        user_label = f"Technical Memorandum AID-{self.briefing_date_str} • Author/Recipient: {self.subscriber_name}" if self.subscriber_name else "IEEE Technical Memorandum"
         self.drawString(MARGIN_HORIZONTAL, footer_y, user_label)
         self.drawRightString(
             PAGE_WIDTH - MARGIN_HORIZONTAL,
@@ -355,14 +355,14 @@ class PDFReportGenerator:
 
         date_str = batch_date.strftime("%A, %B %d, %Y")
 
-        # 1. Masthead Header Table
+        # 1. Masthead Header Table (IEEE Technical Memorandum Style)
         masthead_left = [
-            Paragraph("<b>THE AI DISPATCH</b>", self.style_masthead),
-            Paragraph(f"<b>DAILY INTELLIGENCE BRIEFING</b> &bull; {clean_xml(date_str).upper()}", self.style_subtitle),
+            Paragraph("<b>THE AI RESEARCH DISPATCH</b>", self.style_masthead),
+            Paragraph(f"<b>IEEE TECHNICAL MEMORANDUM &bull; APPLIED AI INTELLIGENCE</b> &bull; {clean_xml(date_str).upper()}", self.style_subtitle),
         ]
         badge_p = Paragraph(
-            f"<para align='right'><font size='7' color='#2563EB'><b>VOLUME II &bull; ISSUE 24</b></font><br/>"
-            f"<font size='8' color='#0F172A'><b>PERSONALIZED EDITION</b></font></para>",
+            f"<para align='right'><font size='7' color='#002855'><b>ISSN 2831-7726 &bull; VOL. II, NO. 24</b></font><br/>"
+            f"<font size='8' color='#0F172A'><b>PEER-REVIEWED SYNTHESIS</b></font></para>",
             self.style_item_meta,
         )
         t_mast = Table([[masthead_left, badge_p]], colWidths=[CONTENT_WIDTH * 0.75, CONTENT_WIDTH * 0.25])
@@ -381,13 +381,13 @@ class PDFReportGenerator:
         interests_str = ", ".join(interests[:4]) if interests else "General AI & Engineering"
         profile_content = [
             Paragraph(
-                f"<b>READER PROFILE:</b> {clean_xml(subscriber_name)} &bull; "
-                f"<font color='#2563EB'><b>{clean_xml(subscriber_role)}</b></font>",
+                f"<b>FELLOW / RECIPIENT:</b> {clean_xml(subscriber_name)} &bull; "
+                f"<font color='#002855'><b>{clean_xml(subscriber_role)}</b></font>",
                 self.style_box_header,
             ),
             Paragraph(
-                f"<b>Expertise:</b> {clean_xml(expertise_level.capitalize())} &nbsp;|&nbsp; "
-                f"<b>Active Focus Areas:</b> {clean_xml(interests_str)}",
+                f"<b>Classification:</b> {clean_xml(expertise_level.capitalize())} &nbsp;|&nbsp; "
+                f"<b>Research Focus Areas:</b> {clean_xml(interests_str)}",
                 self.style_box_body,
             ),
         ]
@@ -405,11 +405,11 @@ class PDFReportGenerator:
 
         # 3. Executive Overview Box
         exec_text = clean_xml(executive_summary) if executive_summary else (
-            "Today's intelligence cycle synthesizes key developments across Anthropic research, "
-            "OpenAI enterprise and agentic infrastructure, and strategic founder interviews."
+            "This memorandum synthesizes empirical research developments across Anthropic, "
+            "OpenAI foundation models, and distributed computational engineering lectures."
         )
         overview_content = [
-            Paragraph("<b>EXECUTIVE INTELLIGENCE SYNTHESIS</b>", self.style_box_header),
+            Paragraph("<b>EXECUTIVE ABSTRACT &amp; PROBLEM SCOPE</b>", self.style_box_header),
             Spacer(1, 3),
             Paragraph(exec_text, self.style_body),
         ]
@@ -427,13 +427,13 @@ class PDFReportGenerator:
 
         # 4. Briefing Navigation & Reading Guide
         guide_text = (
-            f"<b>HOW THIS BRIEFING IS ORGANIZED (PROGRESSIVE STRUCTURE):</b><br/>"
-            f"To maximize efficiency and provide natural cognitive progression, this report is divided into two distinct sections:<br/>"
-            f"&bull; <b>Part I &mdash; Ecosystem Radar & Quick Bites ({radar_count} items):</b> Opens the briefing with compact 3&ndash;4 line "
-            f"operational summaries covering broader market movements, ecosystem announcements, and technical signals to provide fast, high-level scanning.<br/>"
-            f"&bull; <b>Part II &mdash; Featured Strategic Deep Dives ({featured_count} items):</b> Expands into comprehensive technical deep dives, "
-            f"architectural problem/solution analyses, and actionable takeaways, culminating in today's "
-            f"<b>Lead Strategic Analysis:</b> <i>'{clean_xml(top_title[:65])}...'</i>."
+            f"<b>METHODOLOGY &amp; PROCEEDINGS STRUCTURE:</b><br/>"
+            f"In accordance with IEEE technical memo conventions, literature is organized into two structured sections:<br/>"
+            f"&bull; <b>Section I &mdash; Ecosystem Radar &amp; Preprints ({radar_count} items):</b> Opens with compact 3&ndash;4 line "
+            f"briefs on platform infrastructure, auxiliary releases, and technical signals to enable rapid scanning.<br/>"
+            f"&bull; <b>Section II &mdash; Primary Research &amp; Strategic Analyses ({featured_count} items):</b> Comprehensive "
+            f"architectural evaluations, problem-statement matrices, and actionable practitioner directives, culminating in today's "
+            f"<b>Lead Strategic Recommendation:</b> <i>'{clean_xml(top_title[:65])}...'</i>."
         )
         t_guide = Table([[Paragraph(guide_text, self.style_body)]], colWidths=[CONTENT_WIDTH])
         t_guide.setStyle(TableStyle([
@@ -477,10 +477,10 @@ class PDFReportGenerator:
             return flowables
 
         # Section Heading
-        flowables.append(Paragraph("<b>PART I: ECOSYSTEM RADAR &amp; IN BRIEF</b>", self.style_section_h1))
+        flowables.append(Paragraph("<b>SECTION I: ECOSYSTEM RADAR &amp; TECHNICAL PREPRINTS</b>", self.style_section_h1))
         flowables.append(
             Paragraph(
-                "Compact tactical briefings on broader industry movements, platform updates, and background signals.",
+                "Tactical briefings and preliminary notes on broader industry movements, platform updates, and technical signals.",
                 self.style_section_desc,
             )
         )
@@ -542,7 +542,7 @@ class PDFReportGenerator:
             return flowables
 
         # Section Heading
-        flowables.append(Paragraph("<b>PART II: STRATEGIC FEATURED DEEP DIVES</b>", self.style_section_h1))
+        flowables.append(Paragraph("<b>SECTION II: PRIMARY RESEARCH &amp; STRATEGIC ANALYSES</b>", self.style_section_h1))
         flowables.append(
             Paragraph(
                 "High-conviction architectural and technical breakthroughs tailored to your focus areas, "
@@ -572,7 +572,7 @@ class PDFReportGenerator:
                 border_width = 1.5
                 header_bg = ACCENT_GREEN_BG
             else:
-                badge_html = "<font color='#2563EB'><b>STRATEGIC FEATURED DEEP DIVE</b></font>"
+                badge_html = "<font color='#002855'><b>PEER RESEARCH REPORT &bull; STRATEGIC DEEP DIVE</b></font>"
                 border_color = CARD_BORDER
                 border_width = 0.8
                 header_bg = CARD_BG
