@@ -116,11 +116,11 @@ class EmailDeliveryAgent:
         # Synthesize Executive Summary text
         exec_summary = (
             f"Today's intelligence dispatch for {sub_name} ({sub_role}) highlights empirical breakthroughs "
-            f"and strategic infrastructure moves, culminating in our #1 recommendation: '{top_title}'. "
+            f"and strategic infrastructure moves, culminating in our Top Strategic Recommendation: '{top_title}'. "
             f"Auxiliary and ecosystem news has been routed to the Ecosystem Radar to provide complete scannability."
         )
 
-        # 1. Generate Publication-Grade Visual PDF (Ordered: least rank/radar first -> #1 top pick last)
+        # 1. Generate Publication-Grade Visual PDF (Ordered: radar first -> top pick last)
         os.makedirs(export_dir, exist_ok=True)
         pdf_filename = f"Daily_AI_Briefing_{batch_date.isoformat()}.pdf"
         pdf_path = os.path.join(export_dir, pdf_filename)

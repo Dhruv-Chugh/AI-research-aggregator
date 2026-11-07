@@ -47,6 +47,9 @@ def test_render_html_body_includes_metadata_and_structure_guide():
     assert "Reading Order:" in html
     assert "Top Featured Strategic Stories" in html
     assert "Ecosystem Radar &amp; Quick Takes" in html or "Ecosystem Radar & Quick Takes" in html
+    assert "Rank #" not in html
+    assert "video thumbnails" not in html
+    assert "TOP STRATEGIC PICK" in html
 
 
 def test_render_plain_text():
@@ -68,6 +71,9 @@ def test_render_plain_text():
     assert "Dhruv Chugh" in text
     assert "Summary text." in text
     assert "Daily_AI_Briefing_2026-11-07.pdf" in text
+    assert "Rank #" not in text
+    assert "[1]" not in text
+    assert "[TOP RECOMMENDATION]" in text
 
 
 def test_dispatch_safe_local_export(tmp_path):

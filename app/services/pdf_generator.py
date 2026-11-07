@@ -3,10 +3,10 @@
 Renders an executive, publication-grade AI intelligence briefing:
 - Page 1: Masthead Cover & Intro page with subscriber profile, executive overview,
   and reading guide explaining the reverse-climax structure (Radar/Short summaries first,
-  escalating up to the #1 Top Recommendation).
-- Part I: Ecosystem Radar & Quick Bites (3-4 line concise summaries, least rank first).
-- Part II: Featured Strategic Deep Dives (building up to the #1 Most Favorite pick,
-  with visual score bars, YouTube thumbnails, problem/solution boxes, and takeaways).
+  progressing to the Top Strategic Recommendation).
+- Part I: Ecosystem Radar & Quick Bites (3-4 line concise summaries).
+- Part II: Featured Strategic Deep Dives (building up to the Top Strategic Recommendation,
+  with visual score bars, executive metadata cards, problem/solution matrices, and actionable takeaways).
 - Dynamic two-pass NumberedCanvas for 'Page X of Y' and running headers.
 """
 
@@ -425,15 +425,15 @@ class PDFReportGenerator:
         flowables.append(t_over)
         flowables.append(Spacer(1, 12))
 
-        # 4. Briefing Navigation & Reading Guide (Fulfills specific user request)
+        # 4. Briefing Navigation & Reading Guide
         guide_text = (
-            f"<b>HOW THIS BRIEFING IS ORGANIZED (REVERSE-CLIMAX STRUCTURE):</b><br/>"
+            f"<b>HOW THIS BRIEFING IS ORGANIZED (PROGRESSIVE STRUCTURE):</b><br/>"
             f"To maximize efficiency and provide natural cognitive progression, this report is divided into two distinct sections:<br/>"
-            f"&bull; <b>Part I &mdash; Ecosystem Radar & Quick Bites ({radar_count} items):</b> Comes <i>first</i> with compact 3&ndash;4 line "
-            f"operational briefs covering lower-ranked, auxiliary updates and market signals to give you rapid broad-spectrum awareness.<br/>"
-            f"&bull; <b>Part II &mdash; Featured Strategic Deep Dives ({featured_count} items):</b> Builds <i>upward</i> in significance, "
-            f"providing comprehensive architectural analyses, problem/solution breakthroughs, and role takeaways, culminating in today's "
-            f"<b>#1 Top Recommendation:</b> <i>'{clean_xml(top_title[:60])}...'</i>."
+            f"&bull; <b>Part I &mdash; Ecosystem Radar & Quick Bites ({radar_count} items):</b> Opens the briefing with compact 3&ndash;4 line "
+            f"operational summaries covering broader market movements, ecosystem announcements, and technical signals to provide fast, high-level scanning.<br/>"
+            f"&bull; <b>Part II &mdash; Featured Strategic Deep Dives ({featured_count} items):</b> Expands into comprehensive technical deep dives, "
+            f"architectural problem/solution analyses, and actionable takeaways, culminating in today's "
+            f"<b>Lead Strategic Analysis:</b> <i>'{clean_xml(top_title[:65])}...'</i>."
         )
         t_guide = Table([[Paragraph(guide_text, self.style_body)]], colWidths=[CONTENT_WIDTH])
         t_guide.setStyle(TableStyle([
@@ -480,14 +480,13 @@ class PDFReportGenerator:
         flowables.append(Paragraph("<b>PART I: ECOSYSTEM RADAR &amp; IN BRIEF</b>", self.style_section_h1))
         flowables.append(
             Paragraph(
-                "Short 3&ndash;4 line tactical briefs on broader industry movements, corporate developments, "
-                "and background signals. Ordered ascending by priority.",
+                "Compact tactical briefings on broader industry movements, platform updates, and background signals.",
                 self.style_section_desc,
             )
         )
         flowables.append(HRFlowable(width="100%", thickness=1, color=DIVIDER_COLOR, spaceBefore=2, spaceAfter=8))
 
-        # Ascending sort: lowest score / least rank first (e.g. Rank 8 -> 6 -> 5)
+        # Ascending sort: lowest score first to build momentum
         sorted_radar = sorted(quick_bites, key=lambda x: (x.rank_score, -x.rank_position))
 
         for idx, item in enumerate(sorted_radar, 1):
@@ -500,11 +499,11 @@ class PDFReportGenerator:
             quick_summary = clean_xml(item.quick_summary or digest.summary[:280] + "...")
             relevance = clean_xml(item.relevance_reasoning)
 
-            # Source badge & score bar
+            # Source badge & score bar (Clean executive header without rank numbers)
             header_cell = [
                 Paragraph(
-                    f"<font color='#2563EB'><b>[{src_name} &bull; {src_type.upper()}]</b></font> &nbsp; "
-                    f"<b>Rank #{item.rank_position}</b> &nbsp;&bull;&nbsp; Score: <b>{score:.1f}/100</b>",
+                    f"<font color='#2563EB'><b>[{src_name} &bull; {src_type.upper()}]</b></font> &nbsp;&bull;&nbsp; "
+                    f"Relevance Score: <b>{score:.1f}/100</b>",
                     self.style_item_meta,
                 ),
                 Paragraph(
@@ -546,14 +545,14 @@ class PDFReportGenerator:
         flowables.append(Paragraph("<b>PART II: STRATEGIC FEATURED DEEP DIVES</b>", self.style_section_h1))
         flowables.append(
             Paragraph(
-                "High-conviction architectural and technical breakthroughs tailored to your focus areas. "
-                "Arranged in escalating order, culminating in today's <b>#1 Top Recommendation</b>.",
+                "High-conviction architectural and technical breakthroughs tailored to your focus areas, "
+                "progressing toward today's <b>Lead Strategic Recommendation</b>.",
                 self.style_section_desc,
             )
         )
         flowables.append(HRFlowable(width="100%", thickness=1, color=DIVIDER_COLOR, spaceBefore=2, spaceAfter=10))
 
-        # Order ascending toward climax: lowest featured rank score first -> #1 Crown Jewel last!
+        # Order ascending toward climax: lowest score first -> Lead Strategic Recommendation last
         sorted_featured = sorted(featured_items, key=lambda x: (x.rank_score, -x.rank_position))
 
         for item in sorted_featured:
@@ -566,14 +565,14 @@ class PDFReportGenerator:
             title = clean_xml(digest.title)
             url = digest.url
 
-            # Crown Jewel badge for #1
+            # Executive badge (no rank numbers)
             if is_top:
-                badge_html = "<font color='#DC2626'><b>&#9733; #1 TOP RECOMMENDATION (CROWN JEWEL)</b></font>"
+                badge_html = "<font color='#059669'><b>&#9733; TOP STRATEGIC RECOMMENDATION (LEAD ANALYSIS)</b></font>"
                 border_color = ACCENT_GREEN
                 border_width = 1.5
                 header_bg = ACCENT_GREEN_BG
             else:
-                badge_html = f"<font color='#2563EB'><b>FEATURED DEEP DIVE &bull; RANK #{item.rank_position}</b></font>"
+                badge_html = "<font color='#2563EB'><b>STRATEGIC FEATURED DEEP DIVE</b></font>"
                 border_color = CARD_BORDER
                 border_width = 0.8
                 header_bg = CARD_BG
@@ -600,51 +599,49 @@ class PDFReportGenerator:
 
             item_flowables: List[Any] = [t_head, Spacer(1, 4)]
 
-            # 2. Thumbnail handling (for YouTube videos or media)
-            thumb_img = None
-            if hasattr(digest, "article") and digest.article:
-                meta = digest.article.metadata_json or {}
-                thumb_url = meta.get("thumbnail_url")
-                if not thumb_url and digest.source_type == "youtube":
-                    # Fallback to standard YouTube thumbnail
-                    ext_id = digest.article.external_id
-                    thumb_url = f"https://i3.ytimg.com/vi/{ext_id}/hqdefault.jpg"
-                if thumb_url:
-                    thumb_img = self._fetch_thumbnail(thumb_url, digest.article.external_id)
+            # 2. Executive Metadata Card (Streamlined typographic layout without video thumbnails)
+            url_display = url if len(url) <= 65 else f"{url[:62]}..."
+            meta_status = "<b>★ LEAD STORY</b>" if is_top else "FEATURED ANALYSIS"
+            meta_rows = [
+                [
+                    Paragraph(f"<b>PLATFORM / SOURCE:</b> {src_name} &bull; {src_type.upper()}", self.style_box_header),
+                    Paragraph(f"<b>COVERAGE STATUS:</b> <font color='#2563EB'>{meta_status}</font>", self.style_box_header),
+                ],
+                [
+                    Paragraph(f"<b>RESOURCE LINK:</b> <a href='{url}' color='#2563EB'><u>{clean_xml(url_display)}</u></a>", self.style_box_body),
+                    Paragraph(f"<b>RELEVANCE RATING:</b> <b>{score:.1f}</b> / 100", self.style_box_body),
+                ],
+            ]
+            t_meta = Table(meta_rows, colWidths=[(CONTENT_WIDTH - 20) * 0.65, (CONTENT_WIDTH - 20) * 0.35])
+            t_meta.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, -1), BRAND_LIGHT_BG),
+                ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#CBD5E1")),
+                ("INNERGRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#E2E8F0")),
+                ("TOPPADDING", (0, 0), (-1, -1), 4),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+                ("LEFTPADDING", (0, 0), (-1, -1), 8),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+            ]))
+            item_flowables.append(t_meta)
+            item_flowables.append(Spacer(1, 5))
 
-            if thumb_img:
-                meta_rows = [
-                    [
-                        thumb_img,
-                        [
-                            Paragraph(f"<b>Platform:</b> {clean_xml(digest.source_name)}", self.style_box_header),
-                            Paragraph(f"<b>Original Link:</b> <a href='{url}' color='#2563EB'>{url[:40]}...</a>", self.style_box_body),
-                            Paragraph(f"<b>Relevance Rationale:</b> <i>{clean_xml(item.relevance_reasoning)}</i>", self.style_box_body),
-                        ],
-                    ]
-                ]
-                t_thumb = Table(meta_rows, colWidths=[185, CONTENT_WIDTH - 190])
-                t_thumb.setStyle(TableStyle([
-                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                    ("LEFTPADDING", (0, 0), (-1, -1), 0),
-                    ("RIGHTPADDING", (0, 0), (-1, -1), 0),
-                    ("TOPPADDING", (0, 0), (-1, -1), 0),
-                    ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
-                ]))
-                item_flowables.append(t_thumb)
-            else:
-                # Text Rationale Box
-                t_rat = Table([[Paragraph(f"<b>Why This Matters For You:</b> <i>{clean_xml(item.relevance_reasoning)}</i>", self.style_body)]], colWidths=[CONTENT_WIDTH - 16])
-                t_rat.setStyle(TableStyle([
-                    ("BACKGROUND", (0, 0), (-1, -1), BRAND_LIGHT_BG),
-                    ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#BFDBFE")),
-                    ("TOPPADDING", (0, 0), (-1, -1), 5),
-                    ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
-                    ("LEFTPADDING", (0, 0), (-1, -1), 6),
-                    ("RIGHTPADDING", (0, 0), (-1, -1), 6),
-                ]))
-                item_flowables.append(t_rat)
-                item_flowables.append(Spacer(1, 4))
+            # Strategic Relevance Rationale Box
+            rationale_bg = ACCENT_GREEN_BG if is_top else CARD_BG
+            rationale_border = colors.HexColor("#A7F3D0") if is_top else colors.HexColor("#CBD5E1")
+            t_rat = Table(
+                [[Paragraph(f"<b>Strategic Fit for Your Role:</b> <i>{clean_xml(item.relevance_reasoning)}</i>", self.style_body)]],
+                colWidths=[CONTENT_WIDTH - 20],
+            )
+            t_rat.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, -1), rationale_bg),
+                ("BOX", (0, 0), (-1, -1), 0.5, rationale_border),
+                ("TOPPADDING", (0, 0), (-1, -1), 5),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+                ("LEFTPADDING", (0, 0), (-1, -1), 8),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+            ]))
+            item_flowables.append(t_rat)
+            item_flowables.append(Spacer(1, 5))
 
             # 3. Comprehensive Half-Page Summary
             summary_clean = clean_xml(digest.summary)

@@ -86,17 +86,20 @@ class EmailService:
         radar_count = len(radar_items)
         featured_count = len(featured_items)
 
-        # Build preview list of deep dives
+        # Build preview list of deep dives (Executive styling without rank numbers)
         featured_rows = ""
-        for item in sorted(featured_items, key=lambda x: x.rank_position):
+        for item in sorted(featured_items, key=lambda x: -x.rank_score):
             d = item.digest
-            badge = "&#128293; <b>TOP PICK</b>" if item.rank_position == 1 else f"Rank #{item.rank_position}"
+            is_top = (item.rank_position == 1)
+            badge = "&#9733; <b>TOP STRATEGIC PICK</b>" if is_top else "<b>FEATURED STORY</b>"
+            badge_bg = "#ECFDF5" if is_top else "#EFF6FF"
+            badge_color = "#059669" if is_top else "#2563EB"
             featured_rows += f"""
             <tr style="border-bottom: 1px solid #E2E8F0;">
                 <td style="padding: 10px 8px; font-size: 13px; color: #0F172A;">
-                    <span style="background-color: #EFF6FF; color: #2563EB; font-weight: bold; font-size: 11px; padding: 2px 6px; border-radius: 4px;">{badge}</span>
-                    <span style="font-weight: bold; margin-left: 6px;"><a href="{d.url}" style="color: #0F172A; text-decoration: none;">{d.title}</a></span>
-                    <div style="font-size: 11px; color: #64748B; margin-top: 3px;">Source: {d.source_name} &bull; Score: <b>{item.rank_score:.1f}/100</b></div>
+                    <span style="background-color: {badge_bg}; color: {badge_color}; font-weight: bold; font-size: 11px; padding: 3px 8px; border-radius: 4px;">{badge}</span>
+                    <span style="font-weight: bold; margin-left: 8px;"><a href="{d.url}" style="color: #0F172A; text-decoration: none;">{d.title}</a></span>
+                    <div style="font-size: 11px; color: #64748B; margin-top: 4px;">Source: <b>{d.source_name}</b> &bull; Relevance Score: <b>{item.rank_score:.1f}/100</b></div>
                 </td>
             </tr>
             """
@@ -156,7 +159,7 @@ class EmailService:
             <div>
               <div style="font-size: 14px; font-weight: bold; color: #065F46;">Full Visual PDF Report Attached</div>
               <div style="font-size: 12px; color: #047857; margin-top: 2px;">
-                Open <b>Daily_AI_Briefing_{batch_date.isoformat()}.pdf</b> for in-depth half-page analyses, video thumbnails, problem/solution comparisons, and role takeaways.
+                Open <b>Daily_AI_Briefing_{batch_date.isoformat()}.pdf</b> for in-depth executive analyses, strategic relevance metrics, problem/solution comparisons, and role takeaways.
               </div>
             </div>
           </div>
@@ -164,7 +167,7 @@ class EmailService:
 
         <!-- How It's Structured Explanation -->
         <div style="background-color: #FFFBEB; border: 1px solid #FDE68A; padding: 12px 16px; border-radius: 6px; font-size: 12px; color: #92400E; line-height: 1.5; margin-bottom: 20px;">
-          <b>&#9889; Reading Order:</b> The attached PDF is built with a reverse-climax structure: It begins with the <b>Ecosystem Radar</b> (short 3-4 line briefs of auxiliary news), and culminates in your <b>Featured Strategic Deep Dives</b>, ending with today's <b>#1 Top Recommendation</b>.
+          <b>&#9889; Reading Order:</b> The attached PDF is structured progressively: It begins with the <b>Ecosystem Radar</b> (short 3-4 line briefs of broader market signals), and leads into your <b>Featured Strategic Deep Dives</b>, culminating in the <b>Top Strategic Recommendation</b>.
         </div>
 
         <!-- Section 1 Preview: Featured Deep Dives -->
@@ -226,16 +229,18 @@ class EmailService:
             f"as a high-resolution PDF: Daily_AI_Briefing_{batch_date.isoformat()}.pdf",
             "",
             "STRUCTURE: Organized from Ecosystem Radar (3-4 line quick bites) to",
-            "Top Featured Deep Dives, culminating in today's #1 recommendation.",
+            "Top Featured Deep Dives, culminating in the Top Strategic Recommendation.",
             "",
             "=" * 60,
             f"FEATURED DEEP DIVES ({len(featured_items)}):",
         ]
-        for it in sorted(featured_items, key=lambda x: x.rank_position):
+        for it in sorted(featured_items, key=lambda x: -x.rank_score):
             d = it.digest
-            lines.append(f"  [{it.rank_position}] Score: {it.rank_score:.1f}/100 | {d.title}")
+            is_top = (it.rank_position == 1)
+            prefix = "[TOP RECOMMENDATION]" if is_top else "[FEATURED]"
+            lines.append(f"  * {prefix} {d.title} (Relevance Score: {it.rank_score:.1f}/100)")
             lines.append(f"      Source: {d.source_name} | URL: {d.url}")
-            lines.append(f"      Why: {it.relevance_reasoning}")
+            lines.append(f"      Strategic Context: {it.relevance_reasoning}")
             lines.append("")
 
         lines.extend([

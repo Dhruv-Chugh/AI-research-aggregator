@@ -114,3 +114,41 @@ def test_pdf_generator_reverse_climax_ordering(tmp_path):
     featured_flowables = gen.build_featured_section([r_feat2, r_feat1])
     assert len(featured_flowables) > 2
 
+
+def test_pdf_generator_no_rank_numbers_or_thumbnails(tmp_path):
+    """Ensure PDF flowables do not contain 'Rank #' or thumbnail images."""
+    gen = PDFReportGenerator(cache_dir=str(tmp_path / "cache"))
+
+    d1 = make_mock_digest("Claude 3.7", "https://anthropic.com", "Anthropic", "anthropic", "Claude details.")
+    r1 = make_mock_ranking(d1, rank_position=1, rank_score=95.0, tier="featured", relevance="Top fit")
+
+    d2 = make_mock_digest("YouTube Tech Talk", "https://yt.com/123", "YouTube", "youtube", "Video summary.")
+    r2 = make_mock_ranking(d2, rank_position=4, rank_score=75.0, tier="quick_bite", relevance="Video fit", quick_summary="Short take.")
+
+    radar_flowables = gen.build_radar_section([r2])
+    featured_flowables = gen.build_featured_section([r1])
+    intro_flowables = gen.build_intro_page("Dhruv", "Architect", "advanced", ["AI"], "Exec summary", date(2026, 11, 8), 1, 1, "Claude 3.7")
+
+    # Serialize flowables text for assertion
+    def extract_text(item):
+        texts = []
+        if isinstance(item, str):
+            return [item]
+        if isinstance(item, list):
+            for sub in item:
+                texts.extend(extract_text(sub))
+            return texts
+        if hasattr(item, "text"):
+            texts.append(item.text)
+        if hasattr(item, "_cellvalues"):
+            for row in item._cellvalues:
+                for cell in row:
+                    texts.extend(extract_text(cell))
+        return texts
+
+    all_text = " ".join(extract_text(intro_flowables + radar_flowables + featured_flowables))
+    assert "Rank #" not in all_text
+    assert "#1 Top Recommendation" not in all_text
+    assert "TOP STRATEGIC RECOMMENDATION" in all_text
+    assert "STRATEGIC FEATURED DEEP DIVE" in all_text or "TOP STRATEGIC RECOMMENDATION" in all_text
+
