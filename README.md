@@ -174,8 +174,8 @@ erDiagram
 
 ### 1. Clone & Install Dependencies
 ```bash
-git clone https://github.com/Dhruv-Chugh/AI-news-aggregator.git
-cd AI-news-aggregator
+git clone https://github.com/Dhruv-Chugh/AI-research-aggregator.git
+cd AI-research-aggregator
 
 # Install dependencies into isolated .venv using uv
 uv sync
