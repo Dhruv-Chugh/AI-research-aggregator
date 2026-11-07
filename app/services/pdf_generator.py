@@ -20,15 +20,12 @@ import re
 from datetime import date, datetime
 from typing import Any, Dict, List, Optional, Tuple
 
-import httpx
-from PIL import Image as PILImage
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.pdfgen import canvas
 from reportlab.platypus import (
     HRFlowable,
-    Image as RLImage,
     KeepTogether,
     PageBreak,
     Paragraph,
@@ -159,9 +156,8 @@ class NumberedCanvas(canvas.Canvas):
 class PDFReportGenerator:
     """Generates publication-quality, visually appealing intelligence briefing PDFs."""
 
-    def __init__(self, cache_dir: str = "exports/thumbnails") -> None:
+    def __init__(self, cache_dir: Optional[str] = None) -> None:
         self.cache_dir = cache_dir
-        os.makedirs(self.cache_dir, exist_ok=True)
         self._init_styles()
 
     def _init_styles(self) -> None:
@@ -286,57 +282,6 @@ class PDFReportGenerator:
             firstLineIndent=-12,
             spaceAfter=3,
         )
-
-    def _fetch_thumbnail(self, url: Optional[str], external_id: str) -> Optional[RLImage]:
-        """Download or retrieve cached thumbnail image, scaling gracefully to 16:9 ratio."""
-        if not url:
-            return None
-
-        # Sanitize cache filename
-        safe_id = re.sub(r"[^a-zA-Z0-9_-]", "_", external_id)
-        cache_path = os.path.join(self.cache_dir, f"{safe_id}.jpg")
-
-        image_bytes: Optional[bytes] = None
-
-        if os.path.exists(cache_path):
-            try:
-                with open(cache_path, "rb") as f:
-                    image_bytes = f.read()
-            except Exception as e:
-                logger.debug("Failed to read cached thumbnail %s: %s", cache_path, e)
-
-        if not image_bytes:
-            try:
-                with httpx.Client(timeout=4.0, follow_redirects=True) as client:
-                    resp = client.get(url)
-                    if resp.status_code == 200 and len(resp.content) > 500:
-                        image_bytes = resp.content
-                        with open(cache_path, "wb") as f:
-                            f.write(image_bytes)
-            except Exception as e:
-                logger.debug("Could not download thumbnail from %s: %s", url, e)
-                return None
-
-        if not image_bytes:
-            return None
-
-        try:
-            pil_img = PILImage.open(io.BytesIO(image_bytes))
-            # Convert to RGB if needed
-            if pil_img.mode in ("RGBA", "P"):
-                pil_img = pil_img.convert("RGB")
-
-            buf = io.BytesIO()
-            pil_img.save(buf, format="JPEG", quality=85)
-            buf.seek(0)
-
-            # Target width 180, height 101 (16:9)
-            target_w = 175
-            target_h = 98
-            return RLImage(buf, width=target_w, height=target_h)
-        except Exception as e:
-            logger.debug("Error processing thumbnail image: %s", e)
-            return None
 
     def build_intro_page(
         self,

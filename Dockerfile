@@ -39,3 +39,4 @@ RUN mkdir -p exports/briefings exports/thumbnails logs
 
 # Default entry point: runs the 24-hour autonomous scheduling agent
 CMD ["uv", "run", "python", "-m", "app.agent.ranking_agent", "--daemon", "--interval-hours", "24"]
+
