@@ -1,10 +1,22 @@
-"""SQLAlchemy 2.0 ORM Models for AI News Aggregator.
+"""SQLAlchemy 2.0 ORM Relational Schema for Axiom Dispatch.
 
-Defines schemas for:
-- Source: Monitored YouTube channels, OpenAI feeds, Anthropic feeds
-- Article: Ingested articles and video transcripts with metadata & deduplication
-- Digest: Synthesized daily markdown & HTML summaries
-- Subscriber: Email recipients for the automated digest
+Relational Architecture (Normalized & High-Performance):
+┌──────────┐ 1      N ┌──────────┐ 1      1 ┌──────────────┐ 1      N ┌──────────────────────┐
+│  Source  │─────────<│ Article  │──────────│ ArticleDigest│─────────<│  UserDigestRanking   │
+└──────────┘          └──────────┘          └──────────────┘          └──────────────────────┘
+                                                                                 ^
+                                                                                 │ N
+                                                                      ┌──────────────────────┐
+                                                                      │      Subscriber      │
+                                                                      └──────────────────────┘
+
+Core Tables:
+1. `sources`: Monitored technical intelligence channels (YouTube, OpenAI, Anthropic).
+2. `articles`: Ingested raw papers, articles, and spoken video transcripts.
+3. `digest`: Synthesized LLM analytical briefings (problem, solution, takeaways).
+4. `subscribers`: User profiles (role, technical interests, custom directives).
+5. `user_digest_rankings`: Calibrated daily personalized relevance rankings (tiers, scores).
+6. `digests`: (Legacy / Archive) Historical compiled briefings.
 """
 
 from __future__ import annotations
@@ -205,6 +217,9 @@ class ArticleDigest(Base):
     """
 
     __tablename__ = "digest"
+    __table_args__ = (
+        Index("ix_digest_article_created", "article_id", "created_at"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     article_id: Mapped[int] = mapped_column(
@@ -380,6 +395,7 @@ class UserDigestRanking(Base):
     __tablename__ = "user_digest_rankings"
     __table_args__ = (
         Index("ix_user_digest_subscriber_date", "subscriber_id", "batch_date"),
+        Index("ix_user_digest_subscriber_tier_date", "subscriber_id", "tier", "batch_date"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)

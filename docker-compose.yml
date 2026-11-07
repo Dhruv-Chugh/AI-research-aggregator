@@ -1,7 +1,7 @@
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: ai_news_postgres
+    container_name: axiom_postgres
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
@@ -18,7 +18,24 @@ services:
       retries: 5
       start_period: 10s
 
+  axiom-dispatch:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: axiom_dispatch
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-ai_news_db}
+      ENVIRONMENT: production
+    volumes:
+      - ./exports:/app/exports
+    command: ["uv", "run", "python", "-m", "app.agent.ranking_agent", "--daemon", "--interval-hours", "24"]
+
 volumes:
   postgres_data:
-    name: ai_news_postgres_data
-
+    name: axiom_postgres_data

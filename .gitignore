@@ -1,28 +1,50 @@
-# Python-generated files
+# ==============================================================================
+# Axiom Dispatch - Git Ignore Configuration
+# Ensures sensitive keys, virtualenvs, local caches, and exports are never committed
+# ==============================================================================
+
+# Python bytecode & build artifacts
 __pycache__/
-*.py[oc]
+*.py[cod]
+*$py.class
 build/
 dist/
 wheels/
-*.egg-info
+*.egg-info/
+.installed.cfg
+*.egg
 
 # Virtual environments
-.venv
+.venv/
+env/
+venv/
+ENV/
 
-# Environment files
+# Environment files & Secrets (STRICTLY PRIVATE)
 .env
+.env.*
 !.env.example
-example.env
+*.pem
+*.key
+*.cert
+*.crt
 
-# Local SQLite databases
+# Local databases & logs
 *.db
 *.sqlite3
+*.log
+logs/
 
-# IDE
+# Testing & coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Editor & IDE settings
 .vscode/
 .idea/
+*.swp
+*.swo
 
-# Generated exports and thumbnails
+# Generated briefing exports, PDFs, and HTML previews
 exports/
-
-

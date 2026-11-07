@@ -8,7 +8,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.database.create_tables import create_tables, seed_initial_data
+from app.database.init_db import create_tables, seed_initial_data
 from app.database.models import Article, Base, Digest, Source, Subscriber
 from app.database.repository import (
     ArticleRepository,
