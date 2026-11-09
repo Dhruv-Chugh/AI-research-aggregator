@@ -70,22 +70,13 @@ _pipeline_state: Dict[str, Any] = {
 
 # Default subscriber preferences
 DEFAULT_SUBSCRIBER = {
-    "email": os.getenv("RECIPIENT_EMAIL", ""),
+    "email": "",
     "name": "",
     "is_active": True,
     "bio_or_role": "AI Software Architect & Researcher",
     "expertise_level": "advanced",
-    "interests": [
-        "Autonomous Multi-Agent Systems",
-        "Inference Scaling & LLM Reasoning",
-        "Foundation Model Alignment & Post-Training",
-        "Distributed Neural Architectures & Compute Scaling",
-        "CUDA, Triton & Hardware Acceleration",
-    ],
-    "preferred_sources": [
-        "OpenAI News & Research",
-        "Anthropic News, Engineering & Research",
-    ],
+    "interests": [],
+    "preferred_sources": [],
     "ranking_instructions": (
         "Prioritize production architectures, open-weights releases, and practical implementation details. "
         "De-prioritize high-level corporate hype and financing rounds."
@@ -126,7 +117,30 @@ def auto_init_database() -> bool:
             logger.info("PostgreSQL database detected. Running schema migrations and seeding...")
             create_tables(engine)
             seed_initial_data(engine)
-            logger.info("Database initialized successfully.")
+
+            # Purge any legacy personal subscriber records or legacy channels from DB
+            try:
+                from app.database import get_db_session
+                from app.database.models import Subscriber, Source
+                from sqlalchemy import delete
+                with get_db_session() as session:
+                    session.execute(
+                        delete(Subscriber).where(
+                            (Subscriber.email.ilike("%dhruv%")) |
+                            (Subscriber.email.ilike("%chugh%")) |
+                            (Subscriber.name.ilike("%dhruv%"))
+                        )
+                    )
+                    session.execute(
+                        delete(Source).where(
+                            Source.channel_id.in_(["UCKZozRVHRYsYHGEyNKuhhdA", "UCzwCEE_PchiBULMnAJqhGVg"])
+                        )
+                    )
+                    session.commit()
+            except Exception as clean_err:
+                logger.debug("Database cleanup notice: %s", clean_err)
+
+            logger.info("Database initialized and sanitized successfully.")
             return True
         else:
             logger.info("PostgreSQL not reachable at startup. Operating with local config fallback.")
@@ -233,9 +247,9 @@ def get_db_status_and_subscriber() -> tuple[bool, Dict[str, Any], int, Optional[
             subscriber = session.execute(sub_stmt).scalar_one_or_none()
 
             if subscriber:
-                clean_email = subscriber.email
-                if "dhruvchugh" in clean_email.lower():
-                    clean_email = os.getenv("RECIPIENT_EMAIL", "")
+                clean_email = subscriber.email or ""
+                if any(x in clean_email.lower() for x in ["dhruv", "chugh", "byteme"]):
+                    clean_email = ""
                 clean_name = subscriber.name or pref.get("name") or ""
                 if "dhruv" in clean_name.lower():
                     clean_name = ""
@@ -256,8 +270,8 @@ def get_db_status_and_subscriber() -> tuple[bool, Dict[str, Any], int, Optional[
                 return True, sub_data, article_count, latest_str
 
             clean_pref = dict(pref)
-            if "dhruvchugh" in str(clean_pref.get("email", "")).lower():
-                clean_pref["email"] = os.getenv("RECIPIENT_EMAIL", "")
+            if any(x in str(clean_pref.get("email", "")).lower() for x in ["dhruv", "chugh", "byteme"]):
+                clean_pref["email"] = ""
             if "dhruv" in str(clean_pref.get("name", "")).lower():
                 clean_pref["name"] = ""
 
@@ -419,6 +433,14 @@ async def get_full_configuration():
     sources_cfg = get_sources_config(DEFAULT_SOURCES_PATH)
     db_connected, subscriber_data, article_count, last_scraped = get_db_status_and_subscriber()
 
+    # Filter out legacy personal channels
+    active_yt = [
+        c.model_dump()
+        for c in sources_cfg.youtube_channels
+        if not any(x in (c.handle or "").lower() for x in ["thinkschool", "rajshamani"])
+        and not any(x in c.name.lower() for x in ["think school", "raj shamani"])
+    ]
+
     return {
         "status": "success",
         "system": {
@@ -428,7 +450,7 @@ async def get_full_configuration():
             "server_time": datetime.now(timezone.utc).isoformat(),
         },
         "sources": {
-            "youtube_channels": [c.model_dump() for c in sources_cfg.youtube_channels],
+            "youtube_channels": active_yt,
             "openai": sources_cfg.openai.model_dump(),
             "anthropic": sources_cfg.anthropic.model_dump(),
         },

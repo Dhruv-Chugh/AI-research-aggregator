@@ -4,16 +4,8 @@
   "is_active": true,
   "bio_or_role": "AI Software Architect & Researcher",
   "expertise_level": "advanced",
-  "interests": [
-    "Autonomous Multi-Agent Systems",
-    "Inference Scaling & LLM Reasoning",
-    "Foundation Model Alignment & Post-Training",
-    "Distributed Neural Architectures & Compute Scaling"
-  ],
-  "preferred_sources": [
-    "OpenAI News & Research",
-    "Anthropic News, Engineering & Research"
-  ],
+  "interests": [],
+  "preferred_sources": [],
   "ranking_instructions": "Prioritize production architectures, open-weights releases, and practical implementation details. De-prioritize high-level corporate hype and financing rounds.",
   "lookback_hours": 24,
   "max_featured_per_source": 2,

@@ -1,20 +1,5 @@
 {
-  "youtube_channels": [
-    {
-      "name": "Think School",
-      "channel_id": "UCKZozRVHRYsYHGEyNKuhhdA",
-      "handle": "@thinkschool",
-      "url": "https://www.youtube.com/@thinkschool",
-      "is_active": true
-    },
-    {
-      "name": "Figuring Out by Raj Shamani",
-      "channel_id": "UCzwCEE_PchiBULMnAJqhGVg",
-      "handle": "@rajshamani",
-      "url": "https://www.youtube.com/@rajshamani",
-      "is_active": true
-    }
-  ],
+  "youtube_channels": [],
   "openai": {
     "name": "OpenAI News & Research",
     "rss_url": "https://openai.com/news/rss.xml",

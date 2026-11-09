@@ -961,9 +961,14 @@
       document.getElementById("channelCountLabel").textContent =
         `${sources.youtube_channels.length} Channels Tracked`;
 
-      // Subscriber inputs
-      document.getElementById("subEmail").value = subscriber.email || "";
-      document.getElementById("subName").value = subscriber.name || "";
+      // Subscriber inputs (strip any personal identifiers so placeholders display cleanly)
+      let rawEmail = (subscriber.email || "").trim();
+      if (/dhruv|chugh|byteme/i.test(rawEmail)) rawEmail = "";
+      document.getElementById("subEmail").value = rawEmail;
+
+      let rawName = (subscriber.name || "").trim();
+      if (/dhruv/i.test(rawName)) rawName = "";
+      document.getElementById("subName").value = rawName;
       document.getElementById("subRole").value = subscriber.bio_or_role || "";
 
       // Expertise Level
@@ -1006,16 +1011,26 @@
       const container = document.getElementById("channelListContainer");
       container.innerHTML = "";
 
-      if (channels.length === 0) {
+      // Exclude legacy personal channels
+      const cleanList = (channels || []).filter(ch =>
+        !/thinkschool|rajshamani/i.test(ch.handle || "") &&
+        !/think school|raj shamani/i.test(ch.name || "")
+      );
+
+      if (cleanList.length === 0) {
         container.innerHTML = `
-          <div style="padding: 16px; text-align: center; color: var(--text-secondary); font-size: 13px;">
-            No channels currently monitored. Use the box below to add a YouTube channel.
+          <div style="padding: 24px 16px; text-align: center; border: 1px dashed var(--border-color); border-radius: 8px; background: #fafafa; margin-bottom: 8px;">
+            <div style="font-weight: 500; color: var(--text-primary); margin-bottom: 4px;">No YouTube Channels Added Yet</div>
+            <div style="color: var(--text-secondary); font-size: 13px;">Add technical lecture or AI channels below using their handle (e.g. <code>@TwoMinutePapers</code>) or URL.</div>
           </div>
         `;
+        document.getElementById("channelCountLabel").textContent = "0 Channels Tracked";
         return;
       }
 
-      channels.forEach(ch => {
+      document.getElementById("channelCountLabel").textContent = `${cleanList.length} Channels Tracked`;
+
+      cleanList.forEach(ch => {
         const item = document.createElement("div");
         item.className = "channel-item" + (ch.is_active ? "" : " inactive");
 
