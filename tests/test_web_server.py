@@ -225,3 +225,36 @@ def test_get_system_status():
             assert "total_youtube_channels" in data["sources_summary"]
 
     _run_async(_test())
+
+
+def test_get_pipeline_status():
+    """Verify GET /api/pipeline/status returns pipeline execution state."""
+    async def _test():
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.get("/api/pipeline/status")
+            assert response.status_code == 200
+            data = response.json()
+            assert data["status"] == "success"
+            assert "pipeline" in data
+            assert "scheduler" in data
+            assert data["scheduler"]["interval_hours"] == 24
+
+    _run_async(_test())
+
+
+def test_trigger_pipeline_now_mocked(monkeypatch):
+    """Verify POST /api/pipeline/trigger-now launches background execution."""
+    mock_run = MagicMock(return_value={"status": "success", "total_items": 5, "briefings": 1})
+    monkeypatch.setattr("app.web.server.execute_full_pipeline", mock_run)
+
+    async def _test():
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.post("/api/pipeline/trigger-now")
+            assert response.status_code == 200
+            data = response.json()
+            assert data["status"] == "started"
+            assert "Full 24-hour pipeline launched" in data["message"]
+
+    _run_async(_test())

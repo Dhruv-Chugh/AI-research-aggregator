@@ -644,6 +644,10 @@
           <span class="dot"></span>
           <span id="dbStatusText">Checking database...</span>
         </span>
+        <span id="schedulerStatusBadge" class="status-badge" style="background:#e8f0fe; color:#1a73e8; border-color:#d2e3fc;">
+          <span class="dot" style="background:#1a73e8;"></span>
+          <span id="schedulerStatusText">24h Scheduler: Active</span>
+        </span>
         <span class="status-badge" style="background:#e8eaed; color:#3c4043;">
           IEEE Transactions Profile: Axiom Dispatch
         </span>
@@ -863,6 +867,19 @@
           <input type="checkbox" id="toggleEmailDelivery" checked>
           <span class="slider"></span>
         </label>
+      </div>
+
+      <div style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border);">
+        <label class="field-label">On-Demand Pipeline Execution</label>
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
+          <span style="font-size: 13px; color: var(--text-secondary); flex: 1; min-width: 240px;">
+            Manually trigger ingestion, analytical summarization, two-tier ranking, and IEEE briefing delivery right now.
+          </span>
+          <button type="button" class="btn btn-secondary" id="triggerPipelineBtn" style="border-color: var(--primary); color: var(--primary); font-weight: 500;">
+            <svg class="svg-icon" viewBox="0 0 24 24"><path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/></svg>
+            Run 24h Pipeline Now
+          </button>
+        </div>
       </div>
     </div>
 
@@ -1259,6 +1276,25 @@
 
     document.getElementById("saveAllBtn").onclick = savePreferences;
     document.getElementById("reloadConfigBtn").onclick = loadData;
+
+    document.getElementById("triggerPipelineBtn").onclick = async function() {
+      const btn = this;
+      btn.disabled = true;
+      btn.innerHTML = `<span style="display:inline-block; animation: spin 1s infinite linear;">&#x21bb;</span> Launching Pipeline...`;
+      try {
+        const resp = await fetch("/api/pipeline/trigger-now", { method: "POST" });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.message || "Failed to trigger pipeline");
+        showToast("Full 24-hour pipeline launched in background!");
+      } catch (err) {
+        showToast("Pipeline error: " + err.message, true);
+      } finally {
+        setTimeout(() => {
+          btn.disabled = false;
+          btn.innerHTML = `<svg class="svg-icon" viewBox="0 0 24 24"><path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/></svg> Run 24h Pipeline Now`;
+        }, 3000);
+      }
+    };
 
     // Expertise Radio Card Clicks
     document.querySelectorAll("#expertiseRadioGroup .radio-card-option").forEach(card => {

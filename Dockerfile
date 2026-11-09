@@ -40,6 +40,6 @@ RUN mkdir -p exports/briefings exports/thumbnails logs
 # Expose web configuration portal port
 EXPOSE 8000
 
-# Default entry point: runs the 24-hour autonomous scheduling agent
-CMD ["uv", "run", "python", "-m", "app.agent.ranking_agent", "--daemon", "--interval-hours", "24"]
+# Default entry point: serves web portal + 24-hour autonomous pipeline scheduler
+CMD ["uv", "run", "python", "-m", "app.web.server"]
 

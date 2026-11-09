@@ -6,6 +6,7 @@ Provides an authentic Google/Microsoft Forms-styled configuration interface for:
 - Defining multi-agent LLM ranking directives
 - Toggling frontier lab feeds (OpenAI & Anthropic)
 - Managing delivery settings and triggering pipeline test runs
+- Running an integrated 24-hour autonomous scheduler daemon (APScheduler)
 """
 
 from __future__ import annotations
@@ -26,11 +27,16 @@ if sys.platform.startswith("win"):
 
 import json
 import logging
+import os
+import threading
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from fastapi import FastAPI, HTTPException, Request, status
+
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.interval import IntervalTrigger
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel, Field
@@ -51,6 +57,16 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(na
 PREFERENCES_PATH = Path("config/subscriber_preferences.json")
 TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
 INDEX_HTML_PATH = TEMPLATES_DIR / "index.html"
+
+# Global scheduler and execution tracking state
+_scheduler: Optional[BackgroundScheduler] = None
+_pipeline_state: Dict[str, Any] = {
+    "is_running": False,
+    "last_run_at": None,
+    "last_run_status": "idle",
+    "last_run_error": None,
+    "briefings_delivered": 0,
+}
 
 # Default subscriber preferences
 DEFAULT_SUBSCRIBER = {
@@ -101,6 +117,74 @@ def save_local_preferences(prefs: Dict[str, Any]) -> None:
     PREFERENCES_PATH.write_text(json.dumps(prefs, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
+def auto_init_database() -> bool:
+    """Auto-create tables and seed default subscriber on startup if DB is reachable."""
+    try:
+        from app.database import check_connection, create_tables
+        from app.database.init_db import seed_initial_data
+        from app.database.session import engine
+
+        if check_connection():
+            logger.info("PostgreSQL database detected. Running schema migrations and seeding...")
+            create_tables(engine)
+            seed_initial_data(engine)
+            logger.info("Database initialized successfully.")
+            return True
+        else:
+            logger.info("PostgreSQL not reachable at startup. Operating with local config fallback.")
+            return False
+    except Exception as e:
+        logger.warning("Database auto-init warning: %s", e)
+        return False
+
+
+def execute_full_pipeline(hours: int = 24, send_live: Optional[bool] = None) -> Dict[str, Any]:
+    """Execute complete 24-hour pipeline: scrape -> summarize -> rank -> deliver."""
+    global _pipeline_state
+    if _pipeline_state["is_running"]:
+        logger.warning("Pipeline is already executing. Skipping concurrent run.")
+        return {"status": "skipped", "reason": "Already running"}
+
+    _pipeline_state["is_running"] = True
+    _pipeline_state["last_run_status"] = "running"
+    _pipeline_state["last_run_error"] = None
+
+    try:
+        from app.scrapers.runner import run_news_aggregation
+
+        live_send = send_live
+        if live_send is None:
+            live_send = os.getenv("SEND_LIVE_EMAIL", "true").lower() in ("true", "1", "yes")
+
+        logger.info("Starting autonomous news, ranking & delivery pipeline (hours=%d, live_send=%s)...", hours, live_send)
+        res = run_news_aggregation(
+            hours=hours,
+            include_youtube=True,
+            include_openai=True,
+            include_anthropic=True,
+            fetch_transcripts=True,
+            fetch_full_content=True,
+            sync_to_db=True,
+            summarize=True,
+            rank=True,
+            email_briefing=True,
+            send_live_email=live_send,
+        )
+
+        _pipeline_state["last_run_at"] = datetime.now(timezone.utc).isoformat()
+        _pipeline_state["last_run_status"] = "success"
+        _pipeline_state["briefings_delivered"] = res.briefings_delivered
+        logger.info("Pipeline completed: %d items processed, %d briefings delivered.", res.total_items, res.briefings_delivered)
+        return {"status": "success", "total_items": res.total_items, "briefings": res.briefings_delivered}
+    except Exception as e:
+        logger.error("Pipeline execution failed: %s", e, exc_info=True)
+        _pipeline_state["last_run_status"] = "error"
+        _pipeline_state["last_run_error"] = str(e)
+        return {"status": "error", "error": str(e)}
+    finally:
+        _pipeline_state["is_running"] = False
+
+
 def get_db_status_and_subscriber() -> tuple[bool, Dict[str, Any], int, Optional[str]]:
     """Probe database status and retrieve subscriber profile if available."""
     try:
@@ -112,16 +196,13 @@ def get_db_status_and_subscriber() -> tuple[bool, Dict[str, Any], int, Optional[
             return False, load_local_preferences(), 0, None
 
         with get_db_session() as session:
-            # Query article count
             count_stmt = select(func.count(Article.id))
             article_count = session.execute(count_stmt).scalar() or 0
 
-            # Query last article scrape timestamp
             latest_stmt = select(func.max(Article.created_at))
             latest_dt = session.execute(latest_stmt).scalar()
             latest_str = latest_dt.isoformat() if latest_dt else None
 
-            # Retrieve subscriber
             pref = load_local_preferences()
             sub_email = pref.get("email", DEFAULT_SUBSCRIBER["email"])
             sub_stmt = select(Subscriber).where(Subscriber.email == sub_email)
@@ -226,15 +307,43 @@ class UpdatePreferencesRequest(BaseModel):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("Axiom Dispatch Web Configuration Service initialized.")
+    # 1. Startup: Auto-init database schema and seed data
+    auto_init_database()
+
+    # 2. Launch background scheduler if enabled
+    scheduler_enabled = os.getenv("ENABLE_SCHEDULER", "true").lower() in ("true", "1", "yes")
+    interval_hours = int(os.getenv("SCHEDULER_INTERVAL_HOURS", "24"))
+
+    global _scheduler
+    if scheduler_enabled:
+        try:
+            _scheduler = BackgroundScheduler()
+            _scheduler.add_job(
+                execute_full_pipeline,
+                trigger=IntervalTrigger(hours=interval_hours),
+                id="24h_autonomous_pipeline",
+                name="24-Hour Axiom Dispatch Pipeline",
+                kwargs={"hours": interval_hours},
+                replace_existing=True,
+            )
+            _scheduler.start()
+            logger.info("Started 24-hour background scheduler daemon (interval: every %d hours).", interval_hours)
+        except Exception as e:
+            logger.warning("Could not start background scheduler: %s", e)
+
     yield
-    logger.info("Axiom Dispatch Web Configuration Service stopped.")
+
+    # Shutdown
+    if _scheduler and _scheduler.running:
+        _scheduler.shutdown(wait=False)
+        logger.info("Background scheduler stopped.")
 
 
 app = FastAPI(
     title="Axiom Dispatch Configuration Portal",
     description="Authentic Google/Microsoft Forms styled settings portal for AI Research Aggregator.",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -481,11 +590,47 @@ async def toggle_lab_sources(payload: LabSourcesRequest):
     }
 
 
+@app.get("/api/pipeline/status")
+async def get_pipeline_status():
+    """Query current pipeline execution state and scheduler settings."""
+    interval_hours = int(os.getenv("SCHEDULER_INTERVAL_HOURS", "24"))
+    scheduler_active = _scheduler is not None and _scheduler.running
+    return {
+        "status": "success",
+        "pipeline": _pipeline_state,
+        "scheduler": {
+            "active": scheduler_active,
+            "interval_hours": interval_hours,
+        },
+    }
+
+
+@app.post("/api/pipeline/trigger-now")
+async def trigger_pipeline_now():
+    """Trigger immediate execution of the full 24h pipeline in the background."""
+    if _pipeline_state["is_running"]:
+        return JSONResponse(
+            status_code=409,
+            content={"status": "already_running", "message": "Pipeline is already executing."},
+        )
+
+    # Launch in a daemon thread so HTTP response returns immediately
+    thread = threading.Thread(target=execute_full_pipeline, kwargs={"hours": 24}, daemon=True)
+    thread.start()
+
+    return {
+        "status": "started",
+        "message": "Full 24-hour pipeline launched in the background.",
+        "started_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
 @app.get("/api/status")
 async def get_system_status():
-    """Health check and live system diagnostics."""
+    """Health check and live system diagnostics for Render healthchecks."""
     db_connected, _, article_count, last_scraped = get_db_status_and_subscriber()
     cfg = get_sources_config(DEFAULT_SOURCES_PATH)
+    scheduler_active = _scheduler is not None and _scheduler.running
 
     return {
         "status": "healthy",
@@ -500,19 +645,32 @@ async def get_system_status():
             "openai_active": cfg.openai.is_active,
             "anthropic_active": cfg.anthropic.is_active,
         },
+        "scheduler": {
+            "active": scheduler_active,
+            "pipeline_state": _pipeline_state,
+        },
     }
 
 
-def start(host: str = "127.0.0.1", port: int = 8000, reload: bool = False):
-    """CLI launcher for Axiom Dispatch Web Configuration Server."""
+def start(
+    host: Optional[str] = None,
+    port: Optional[int] = None,
+    reload: bool = False,
+):
+    """CLI launcher for Axiom Dispatch Web Configuration Server and Scheduler."""
     import uvicorn
 
+    target_host = host or os.getenv("HOST", "0.0.0.0")
+    target_port = port or int(os.getenv("PORT", 8000))
+    sched_flag = os.getenv("ENABLE_SCHEDULER", "true")
+
     print(f"\n" + "=" * 65)
-    print(f"🚀 Axiom Dispatch — Web Configuration Portal")
-    print(f"   Listening on: http://{host}:{port}")
-    print(f"   Google/Microsoft Forms Interface Active")
+    print(f"🚀 Axiom Dispatch — Cloud Production Portal & 24h Scheduler")
+    print(f"   Listening on: http://{target_host}:{target_port}")
+    print(f"   Scheduler: {'Active (every 24h)' if sched_flag.lower() in ('true', '1') else 'Disabled'}")
+    print(f"   Database: {'Configured via DATABASE_URL' if os.getenv('DATABASE_URL') else 'Local Fallback'}")
     print(f"=" * 65 + "\n")
-    uvicorn.run("app.web.server:app", host=host, port=port, reload=reload)
+    uvicorn.run("app.web.server:app", host=target_host, port=target_port, reload=reload)
 
 
 if __name__ == "__main__":
