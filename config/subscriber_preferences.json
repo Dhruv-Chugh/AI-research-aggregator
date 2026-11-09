@@ -1,8 +1,8 @@
 {
-  "email": "dhruvchugh2007@gmail.com",
-  "name": "Dhruv Chugh",
+  "email": "",
+  "name": "",
   "is_active": true,
-  "bio_or_role": "AI Software Architect & Full-Stack Engineer",
+  "bio_or_role": "AI Software Architect & Researcher",
   "expertise_level": "advanced",
   "interests": [
     "Autonomous Multi-Agent Systems",
@@ -11,9 +11,8 @@
     "Distributed Neural Architectures & Compute Scaling"
   ],
   "preferred_sources": [
-    "Think School",
-    "OpenAI",
-    "Anthropic"
+    "OpenAI News & Research",
+    "Anthropic News, Engineering & Research"
   ],
   "ranking_instructions": "Prioritize production architectures, open-weights releases, and practical implementation details. De-prioritize high-level corporate hype and financing rounds.",
   "lookback_hours": 24,

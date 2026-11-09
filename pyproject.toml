@@ -4,7 +4,7 @@ version = "1.0.0"
 description = "AI Research Intelligence Aggregator: Autonomous Technical Literature Synthesis & IEEE Briefing Platform"
 readme = "README.md"
 authors = [
-    { name = "Dhruv Chugh", email = "dhruvchugh2007@gmail.com" }
+    { name = "AI Research Aggregator Contributors" }
 ]
 requires-python = ">=3.12"
 dependencies = [

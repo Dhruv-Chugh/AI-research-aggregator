@@ -78,11 +78,12 @@ def seed_initial_data(engine: Engine) -> None:
             logger.warning("Could not seed sources from config: %s", e)
 
         # 2. Seed default subscriber
-        default_email = "dhruvchugh2007@gmail.com"
+        import os
+        default_email = os.getenv("RECIPIENT_EMAIL", "subscriber@example.com")
         if not repo.subscribers.get_by_email(default_email):
             repo.subscribers.create(
                 email=default_email,
-                name="Dhruv Chugh",
+                name=os.getenv("SUBSCRIBER_NAME", "Research Practitioner"),
                 is_active=True,
             )
             logger.info("Added default subscriber: %s", default_email)

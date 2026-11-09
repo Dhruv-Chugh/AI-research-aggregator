@@ -419,7 +419,7 @@ class EmailService:
                     hint = (
                         "\n💡 Note: Google has temporarily gated SMTP access with 'WebLoginRequired'.\n"
                         "To unlock it immediately in 10 seconds:\n"
-                        "1. Open https://accounts.google.com/DisplayUnlockCaptcha in your browser while signed into bytemeai2007@gmail.com and click 'Continue'.\n"
+                        "1. Open https://accounts.google.com/DisplayUnlockCaptcha in your browser while signed into your sender Gmail account and click 'Continue'.\n"
                         "2. Or generate a fresh 16-character App Password at https://myaccount.google.com/apppasswords and update SMTP_PASSWORD in .env."
                     )
                     err_msg = f"SMTP security verification required (534 WebLoginRequired): {e}.{hint}"

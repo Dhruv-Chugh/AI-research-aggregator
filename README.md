@@ -35,7 +35,7 @@ The platform operates as a decoupled, multi-agent pipeline backed by PostgreSQL:
 ```mermaid
 flowchart TD
     subgraph Sourcing & Ingestion
-        YT["YouTube Technical Feeds<br/>(Think School, Raj Shamani, etc.)"] --> Runner["Ingestion Runner<br/>(app/scrapers/runner.py)"]
+        YT["YouTube Technical Feeds<br/>(Two Minute Papers, Yannic Kilcher, etc.)"] --> Runner["Ingestion Runner<br/>(app/scrapers/runner.py)"]
         OA["OpenAI Research & Engineering<br/>(Web & RSS Feeds)"] --> Runner
         ANT["Anthropic Research & Engineering<br/>(Web & RSS Feeds)"] --> Runner
         Runner --> Transcripts["Transcript Extraction<br/>(yt-dlp & youtube-transcript-api)"]

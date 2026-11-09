@@ -678,7 +678,7 @@
 
       <div class="form-group">
         <label class="field-label" for="subName">Subscriber Full Name</label>
-        <input type="text" id="subName" class="text-input" placeholder="e.g. Dhruv Chugh">
+        <input type="text" id="subName" class="text-input" placeholder="e.g. Alex Rivers / Research Engineer">
       </div>
 
       <div class="form-group">
@@ -748,7 +748,7 @@
           </button>
         </div>
         <div class="input-helper" id="addChannelHelper">
-          Supports YouTube handles (e.g. <code>@thinkschool</code>), URLs, or 24-character IDs. Metadata is automatically resolved.
+          Supports YouTube handles (e.g. <code>@TwoMinutePapers</code>), URLs, or 24-character IDs. Metadata is automatically resolved.
         </div>
       </div>
     </div>
@@ -839,7 +839,7 @@
 
       <div class="form-group">
         <label class="field-label">Scraper Lookback Window</label>
-        <div style="display: flex; gap: 12px;">
+        <div style="display: flex; gap: 12px; flex-wrap: wrap;">
           <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
             <input type="radio" name="lookback_hours" value="24" checked> Last 24 Hours (Daily)
           </label>
@@ -848,6 +848,9 @@
           </label>
           <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
             <input type="radio" name="lookback_hours" value="72"> Last 72 Hours (Weekend)
+          </label>
+          <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+            <input type="radio" name="lookback_hours" value="168"> Last 7 Days (Weekly / Backfill)
           </label>
         </div>
       </div>
@@ -1282,16 +1285,22 @@
       btn.disabled = true;
       btn.innerHTML = `<span style="display:inline-block; animation: spin 1s infinite linear;">&#x21bb;</span> Launching Pipeline...`;
       try {
-        const resp = await fetch("/api/pipeline/trigger-now", { method: "POST" });
+        const selectedLookback = document.querySelector("input[name='lookback_hours']:checked");
+        const lookbackVal = selectedLookback ? parseInt(selectedLookback.value, 10) : 24;
+        const resp = await fetch("/api/pipeline/trigger-now", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ hours: lookbackVal, send_live: true })
+        });
         const data = await resp.json();
         if (!resp.ok) throw new Error(data.message || "Failed to trigger pipeline");
-        showToast("Full 24-hour pipeline launched in background!");
+        showToast(data.message || `Pipeline launched in background (${lookbackVal}h lookback)!`);
       } catch (err) {
         showToast("Pipeline error: " + err.message, true);
       } finally {
         setTimeout(() => {
           btn.disabled = false;
-          btn.innerHTML = `<svg class="svg-icon" viewBox="0 0 24 24"><path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/></svg> Run 24h Pipeline Now`;
+          btn.innerHTML = `<svg class="svg-icon" viewBox="0 0 24 24"><path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/></svg> Run Pipeline Now`;
         }, 3000);
       }
     };

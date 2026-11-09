@@ -70,10 +70,10 @@ _pipeline_state: Dict[str, Any] = {
 
 # Default subscriber preferences
 DEFAULT_SUBSCRIBER = {
-    "email": "dhruvchugh2007@gmail.com",
-    "name": "Dhruv Chugh",
+    "email": os.getenv("RECIPIENT_EMAIL", ""),
+    "name": "",
     "is_active": True,
-    "bio_or_role": "AI Software Architect & Full-Stack Engineer",
+    "bio_or_role": "AI Software Architect & Researcher",
     "expertise_level": "advanced",
     "interests": [
         "Autonomous Multi-Agent Systems",
@@ -83,10 +83,8 @@ DEFAULT_SUBSCRIBER = {
         "CUDA, Triton & Hardware Acceleration",
     ],
     "preferred_sources": [
-        "Think School",
-        "Figuring Out by Raj Shamani",
-        "OpenAI",
-        "Anthropic",
+        "OpenAI News & Research",
+        "Anthropic News, Engineering & Research",
     ],
     "ranking_instructions": (
         "Prioritize production architectures, open-weights releases, and practical implementation details. "
@@ -138,8 +136,8 @@ def auto_init_database() -> bool:
         return False
 
 
-def execute_full_pipeline(hours: int = 24, send_live: Optional[bool] = None) -> Dict[str, Any]:
-    """Execute complete 24-hour pipeline: scrape -> summarize -> rank -> deliver."""
+def execute_full_pipeline(hours: Optional[int] = None, send_live: Optional[bool] = None) -> Dict[str, Any]:
+    """Execute complete pipeline: scrape -> summarize -> rank -> deliver."""
     global _pipeline_state
     if _pipeline_state["is_running"]:
         logger.warning("Pipeline is already executing. Skipping concurrent run.")
@@ -152,13 +150,18 @@ def execute_full_pipeline(hours: int = 24, send_live: Optional[bool] = None) -> 
     try:
         from app.scrapers.runner import run_news_aggregation
 
+        pref = load_local_preferences()
+        effective_hours = hours
+        if effective_hours is None:
+            effective_hours = int(pref.get("lookback_hours", os.getenv("DEFAULT_LOOKBACK_HOURS", "24")))
+
         live_send = send_live
         if live_send is None:
             live_send = os.getenv("SEND_LIVE_EMAIL", "true").lower() in ("true", "1", "yes")
 
-        logger.info("Starting autonomous news, ranking & delivery pipeline (hours=%d, live_send=%s)...", hours, live_send)
+        logger.info("Starting autonomous news, ranking & delivery pipeline (hours=%d, live_send=%s)...", effective_hours, live_send)
         res = run_news_aggregation(
-            hours=hours,
+            hours=effective_hours,
             include_youtube=True,
             include_openai=True,
             include_anthropic=True,
@@ -170,6 +173,27 @@ def execute_full_pipeline(hours: int = 24, send_live: Optional[bool] = None) -> 
             email_briefing=True,
             send_live_email=live_send,
         )
+
+        # Resilient fallback: If 24h-48h yielded 0 items (e.g. over weekends or quiet research days),
+        # automatically expand lookback to 168 hours (7 days) to ensure subscribers get an intelligence briefing.
+        if res.total_items == 0 and effective_hours <= 48:
+            logger.info(
+                "0 items discovered in %dh window. Expanding lookback to 168 hours (7 days) to ingest recent frontier research...",
+                effective_hours,
+            )
+            res = run_news_aggregation(
+                hours=168,
+                include_youtube=True,
+                include_openai=True,
+                include_anthropic=True,
+                fetch_transcripts=True,
+                fetch_full_content=True,
+                sync_to_db=True,
+                summarize=True,
+                rank=True,
+                email_briefing=True,
+                send_live_email=live_send,
+            )
 
         _pipeline_state["last_run_at"] = datetime.now(timezone.utc).isoformat()
         _pipeline_state["last_run_status"] = "success"
@@ -209,9 +233,16 @@ def get_db_status_and_subscriber() -> tuple[bool, Dict[str, Any], int, Optional[
             subscriber = session.execute(sub_stmt).scalar_one_or_none()
 
             if subscriber:
+                clean_email = subscriber.email
+                if "dhruvchugh" in clean_email.lower():
+                    clean_email = os.getenv("RECIPIENT_EMAIL", "")
+                clean_name = subscriber.name or pref.get("name") or ""
+                if "dhruv" in clean_name.lower():
+                    clean_name = ""
+
                 sub_data = {
-                    "email": subscriber.email,
-                    "name": subscriber.name or pref.get("name"),
+                    "email": clean_email,
+                    "name": clean_name,
                     "is_active": subscriber.is_active,
                     "bio_or_role": subscriber.bio_or_role or pref.get("bio_or_role"),
                     "expertise_level": subscriber.expertise_level or pref.get("expertise_level"),
@@ -224,7 +255,13 @@ def get_db_status_and_subscriber() -> tuple[bool, Dict[str, Any], int, Optional[
                 }
                 return True, sub_data, article_count, latest_str
 
-            return True, pref, article_count, latest_str
+            clean_pref = dict(pref)
+            if "dhruvchugh" in str(clean_pref.get("email", "")).lower():
+                clean_pref["email"] = os.getenv("RECIPIENT_EMAIL", "")
+            if "dhruv" in str(clean_pref.get("name", "")).lower():
+                clean_pref["name"] = ""
+
+            return True, clean_pref, article_count, latest_str
     except Exception as e:
         logger.debug("Database probe fallback: %s", e)
         return False, load_local_preferences(), 0, None
@@ -611,22 +648,34 @@ async def get_pipeline_status():
     }
 
 
+class PipelineTriggerPayload(BaseModel):
+    hours: Optional[int] = Field(default=None, ge=1, le=720, description="Optional custom hours lookback")
+    send_live: Optional[bool] = Field(default=None, description="Force live SMTP send toggle")
+
+
 @app.post("/api/pipeline/trigger-now")
-async def trigger_pipeline_now():
-    """Trigger immediate execution of the full 24h pipeline in the background."""
+async def trigger_pipeline_now(payload: Optional[PipelineTriggerPayload] = None):
+    """Trigger immediate execution of the pipeline in the background."""
     if _pipeline_state["is_running"]:
         return JSONResponse(
             status_code=409,
             content={"status": "already_running", "message": "Pipeline is already executing."},
         )
 
+    req_hours = payload.hours if payload else None
+    req_live = payload.send_live if payload else None
+
     # Launch in a daemon thread so HTTP response returns immediately
-    thread = threading.Thread(target=execute_full_pipeline, kwargs={"hours": 24}, daemon=True)
+    thread = threading.Thread(
+        target=execute_full_pipeline,
+        kwargs={"hours": req_hours, "send_live": req_live},
+        daemon=True,
+    )
     thread.start()
 
     return {
         "status": "started",
-        "message": "Full 24-hour pipeline launched in the background.",
+        "message": f"Autonomous pipeline launched in background (lookback: {req_hours or 'auto'}h).",
         "started_at": datetime.now(timezone.utc).isoformat(),
     }
 
