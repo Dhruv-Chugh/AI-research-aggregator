@@ -9,7 +9,6 @@ version: "1"
 databases:
   - name: ai-news-db
     databaseName: ai_news_db
-    user: postgres
     plan: free
     region: oregon
     postgresMajorVersion: "16"
@@ -55,3 +54,4 @@ services:
         sync: false
       - key: OPENAI_API_KEY
         sync: false
+
