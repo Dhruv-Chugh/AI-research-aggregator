@@ -13,7 +13,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# Install system dependencies (curl for healthchecks / uv installer)
+# Install system dependencies (curl for healthchecks / ca-certificates)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     ca-certificates \
@@ -25,14 +25,18 @@ COPY --from=ghcr.io/astral-sh/uv:0.6.2 /uv /bin/uv
 # Copy dependency manifests first for optimal layer caching
 COPY pyproject.toml uv.lock ./
 
-# Install production dependencies only
+# Install third-party production dependencies
 RUN uv sync --frozen --no-dev --no-install-project
 
-# Copy application source code and configurations
+# Copy application source code, package sources, configurations, and scripts
 COPY app/ app/
 COPY config/ config/
 COPY scripts/ scripts/
+COPY src/ src/
 COPY README.md ./
+
+# Build and install the project itself into the environment
+RUN uv sync --frozen --no-dev
 
 # Create runtime directories for exports and logs
 RUN mkdir -p exports/briefings exports/thumbnails logs
@@ -40,6 +44,5 @@ RUN mkdir -p exports/briefings exports/thumbnails logs
 # Expose web configuration portal port
 EXPOSE 8000
 
-# Default entry point: serves web portal + 24-hour autonomous pipeline scheduler
-CMD ["uv", "run", "python", "-m", "app.web.server"]
-
+# Default entry point: serves web portal + 24-hour autonomous pipeline scheduler without runtime sync
+CMD ["uv", "run", "--no-sync", "python", "-m", "app.web.server"]

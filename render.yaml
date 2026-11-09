@@ -20,7 +20,7 @@ services:
     dockerfilePath: Dockerfile
     plan: free
     region: oregon
-    healthCheckPath: /api/status
+    healthCheckPath: /healthz
     envVars:
       - key: DATABASE_URL
         fromDatabase:
@@ -32,6 +32,8 @@ services:
         value: INFO
       - key: HOST
         value: 0.0.0.0
+      - key: PORT
+        value: "8000"
       - key: ENABLE_SCHEDULER
         value: "true"
       - key: SCHEDULER_INTERVAL_HOURS
@@ -54,4 +56,3 @@ services:
         sync: false
       - key: OPENAI_API_KEY
         sync: false
-

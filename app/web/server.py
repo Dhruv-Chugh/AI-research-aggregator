@@ -355,7 +355,13 @@ app.add_middleware(
 )
 
 
-# --- HTML Frontend Route ---
+# --- HTML Frontend & Healthcheck Routes ---
+
+@app.get("/healthz")
+async def healthcheck():
+    """Ultra-fast, zero-overhead healthcheck endpoint for cloud orchestrators (Render)."""
+    return {"status": "ok", "service": "axiom-dispatch"}
+
 
 @app.get("/", response_class=HTMLResponse)
 async def serve_form_ui():

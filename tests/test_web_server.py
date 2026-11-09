@@ -19,6 +19,19 @@ def _run_async(coro):
     return asyncio.run(coro)
 
 
+def test_healthcheck():
+    """Verify GET /healthz returns 200 OK for Render healthcheck."""
+    async def _test():
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.get("/healthz")
+            assert response.status_code == 200
+            data = response.json()
+            assert data["status"] == "ok"
+
+    _run_async(_test())
+
+
 def test_serve_form_ui():
     """Verify that root endpoint serves the Google/Microsoft Forms HTML page."""
     async def _test():
