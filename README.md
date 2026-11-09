@@ -222,6 +222,8 @@ uv run python -m app.database.init_db --seed
 
 | Command | Action |
 |:---|:---|
+| `uv run python -m app.web.server` | Launch the Google/Microsoft Forms-styled configuration portal on `http://127.0.0.1:8000`. |
+| `.\run_portal.bat` | Convenient one-click launcher for the configuration portal. |
 | `uv run python -m app.scrapers.runner` | Ingest latest articles and video transcripts from all configured sources. |
 | `uv run python -m app.agent.summarizer` | Run LLM synthesis agent to generate analytical digests for unsummarized articles. |
 | `uv run python -m app.agent.ranking_agent --run-now` | Execute one-shot personalized interest ranking for all active subscribers. |

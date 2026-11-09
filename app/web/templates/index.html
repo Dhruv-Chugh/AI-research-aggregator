@@ -1,0 +1,1287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Axiom Dispatch — Technical Intelligence Sourcing & Preferences</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --primary: #1a73e8;
+      --primary-hover: #1557b0;
+      --primary-light: #e8f0fe;
+      --surface: #ffffff;
+      --background: #f0f2f5;
+      --border: #dadce0;
+      --text-main: #202124;
+      --text-secondary: #5f6368;
+      --text-disabled: #80868b;
+      --success: #137333;
+      --success-bg: #e6f4ea;
+      --warning: #b06000;
+      --warning-bg: #fef7e0;
+      --error: #d93025;
+      --error-bg: #fce8e6;
+      --header-accent: #002855;
+      --radius: 8px;
+      --shadow-card: 0 1px 2px 0 rgba(60,64,67,0.12), 0 1px 3px 1px rgba(60,64,67,0.08);
+      --font-sans: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+      --font-mono: 'JetBrains Mono', Consolas, Monaco, monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      background-color: var(--background);
+      color: var(--text-main);
+      line-height: 1.5;
+      font-size: 14px;
+      -webkit-font-smoothing: antialiased;
+      padding-bottom: 90px;
+    }
+
+    .form-container {
+      max-width: 720px;
+      margin: 24px auto 0;
+      padding: 0 16px;
+    }
+
+    /* Top Form Header Card */
+    .card-header {
+      background: var(--surface);
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      border-top: 10px solid var(--header-accent);
+      padding: 24px 28px;
+      margin-bottom: 16px;
+      box-shadow: var(--shadow-card);
+      position: relative;
+    }
+
+    .header-badge-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      font-weight: 500;
+      padding: 4px 10px;
+      border-radius: 12px;
+      border: 1px solid transparent;
+    }
+
+    .status-badge.synced {
+      background: var(--success-bg);
+      color: var(--success);
+      border-color: #ceead6;
+    }
+
+    .status-badge.offline {
+      background: var(--warning-bg);
+      color: var(--warning);
+      border-color: #feefc3;
+    }
+
+    .status-badge .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    .form-title {
+      font-size: 26px;
+      font-weight: 500;
+      color: var(--text-main);
+      letter-spacing: -0.2px;
+      margin-bottom: 8px;
+    }
+
+    .form-subtitle {
+      font-size: 14px;
+      color: var(--text-secondary);
+      line-height: 1.6;
+    }
+
+    .form-meta-divider {
+      margin-top: 18px;
+      padding-top: 14px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    /* Section Question Cards */
+    .form-card {
+      background: var(--surface);
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      padding: 24px 28px;
+      margin-bottom: 16px;
+      box-shadow: var(--shadow-card);
+      transition: border-color 0.2s, border-left-color 0.2s, box-shadow 0.2s;
+      position: relative;
+    }
+
+    .form-card:focus-within {
+      border-left: 6px solid var(--primary);
+    }
+
+    .card-title {
+      font-size: 16px;
+      font-weight: 500;
+      color: var(--text-main);
+      margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .card-description {
+      font-size: 13px;
+      color: var(--text-secondary);
+      margin-bottom: 20px;
+    }
+
+    /* Inputs & Fields */
+    .form-group {
+      margin-bottom: 18px;
+    }
+
+    .form-group:last-child {
+      margin-bottom: 0;
+    }
+
+    .field-label {
+      display: block;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-main);
+      margin-bottom: 6px;
+    }
+
+    .text-input, .textarea-input {
+      width: 100%;
+      padding: 10px 12px;
+      font-size: 14px;
+      font-family: inherit;
+      color: var(--text-main);
+      background: #ffffff;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      outline: none;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+
+    .text-input:focus, .textarea-input:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 2px rgba(26,115,232,0.15);
+    }
+
+    .textarea-input {
+      min-height: 90px;
+      resize: vertical;
+      line-height: 1.5;
+    }
+
+    .input-helper {
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin-top: 4px;
+    }
+
+    /* Radio Group (Expertise Level) */
+    .radio-card-group {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .radio-card-option {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 12px 14px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+    }
+
+    .radio-card-option:hover {
+      background: #fafafa;
+    }
+
+    .radio-card-option.selected {
+      border-color: var(--primary);
+      background: var(--primary-light);
+    }
+
+    .radio-card-option input[type="radio"] {
+      margin-top: 3px;
+      accent-color: var(--primary);
+      cursor: pointer;
+    }
+
+    .radio-option-content strong {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text-main);
+      display: block;
+    }
+
+    .radio-option-content span {
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    /* Channel Management List */
+    .channel-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-bottom: 18px;
+    }
+
+    .channel-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 14px;
+      background: #ffffff;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      gap: 12px;
+    }
+
+    .channel-item.inactive {
+      opacity: 0.65;
+      background: #f8f9fa;
+    }
+
+    .channel-item-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+      flex: 1;
+    }
+
+    .channel-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: #fce8e6;
+      color: #d93025;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .channel-info {
+      min-width: 0;
+    }
+
+    .channel-name {
+      font-weight: 500;
+      font-size: 14px;
+      color: var(--text-main);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .channel-submeta {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin-top: 2px;
+    }
+
+    .channel-badge {
+      background: #e8eaed;
+      color: #3c4043;
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+    }
+
+    .channel-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .icon-btn {
+      background: none;
+      border: none;
+      color: var(--text-secondary);
+      cursor: pointer;
+      padding: 6px;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.15s, color 0.15s;
+    }
+
+    .icon-btn:hover {
+      background: #f1f3f4;
+      color: var(--text-main);
+    }
+
+    .icon-btn.delete-btn:hover {
+      background: var(--error-bg);
+      color: var(--error);
+    }
+
+    /* Switch / Toggle */
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 38px;
+      height: 20px;
+      flex-shrink: 0;
+    }
+
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: #bdc1c6;
+      transition: .2s;
+      border-radius: 20px;
+    }
+
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 14px;
+      width: 14px;
+      left: 3px;
+      bottom: 3px;
+      background-color: white;
+      transition: .2s;
+      border-radius: 50%;
+    }
+
+    input:checked + .slider {
+      background-color: var(--primary);
+    }
+
+    input:checked + .slider:before {
+      transform: translateX(18px);
+    }
+
+    /* Add Channel Box */
+    .add-channel-box {
+      border: 1px dashed var(--border);
+      border-radius: 6px;
+      padding: 14px;
+      background: #fafafa;
+    }
+
+    .add-channel-row {
+      display: flex;
+      gap: 10px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 9px 18px;
+      font-size: 13px;
+      font-weight: 500;
+      font-family: inherit;
+      border-radius: 4px;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+      white-space: nowrap;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: #ffffff;
+    }
+
+    .btn-primary:hover {
+      background: var(--primary-hover);
+      box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+    }
+
+    .btn-secondary {
+      background: #ffffff;
+      color: var(--primary);
+      border-color: var(--border);
+    }
+
+    .btn-secondary:hover {
+      background: #f8f9fa;
+      border-color: #c6c6c6;
+    }
+
+    /* Topic Tags Grid */
+    .tags-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+
+    .topic-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border-radius: 16px;
+      border: 1px solid var(--border);
+      background: #ffffff;
+      font-size: 13px;
+      color: var(--text-main);
+      cursor: pointer;
+      user-select: none;
+      transition: background 0.15s, border-color 0.15s, color 0.15s;
+    }
+
+    .topic-chip:hover {
+      background: #f1f3f4;
+    }
+
+    .topic-chip.active {
+      background: var(--primary-light);
+      border-color: var(--primary);
+      color: var(--primary);
+      font-weight: 500;
+    }
+
+    .topic-chip .chip-check {
+      display: none;
+      width: 14px;
+      height: 14px;
+    }
+
+    .topic-chip.active .chip-check {
+      display: inline-block;
+    }
+
+    .topic-chip .chip-remove {
+      margin-left: 4px;
+      color: var(--text-secondary);
+      cursor: pointer;
+    }
+
+    .add-tag-row {
+      display: flex;
+      gap: 8px;
+    }
+
+    /* Directive Suggestions */
+    .directive-presets {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 8px;
+    }
+
+    .preset-pill {
+      font-size: 12px;
+      color: var(--primary);
+      background: #f1f3f4;
+      padding: 4px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      user-select: none;
+      border: 1px solid transparent;
+      transition: background 0.15s;
+    }
+
+    .preset-pill:hover {
+      background: #e8eaed;
+      border-color: #dadce0;
+    }
+
+    /* Lab Source Toggle Rows */
+    .source-toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 14px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      margin-bottom: 10px;
+    }
+
+    .source-toggle-row:last-child {
+      margin-bottom: 0;
+    }
+
+    .source-details strong {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text-main);
+      display: block;
+    }
+
+    .source-details span {
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    /* Fixed Bottom Action Bar */
+    .bottom-bar {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: #ffffff;
+      border-top: 1px solid var(--border);
+      padding: 14px 24px;
+      box-shadow: 0 -2px 6px rgba(0,0,0,0.06);
+      display: flex;
+      justify-content: center;
+      z-index: 100;
+    }
+
+    .bottom-bar-inner {
+      width: 100%;
+      max-width: 720px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .bottom-status-text {
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+
+    .bottom-btn-group {
+      display: flex;
+      gap: 12px;
+    }
+
+    /* Toast Notification (Google Snackbar Style) */
+    .toast {
+      position: fixed;
+      bottom: 80px;
+      right: 24px;
+      background: #323232;
+      color: #ffffff;
+      padding: 12px 20px;
+      border-radius: 4px;
+      font-size: 14px;
+      box-shadow: 0 3px 8px rgba(0,0,0,0.25);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      transform: translateY(120%);
+      opacity: 0;
+      transition: transform 0.25s cubic-bezier(0, 0, 0.2, 1), opacity 0.25s;
+      z-index: 200;
+      max-width: 420px;
+    }
+
+    .toast.show {
+      transform: translateY(0);
+      opacity: 1;
+    }
+
+    .toast.error {
+      background: #b3261e;
+    }
+
+    /* SVG Icon Helpers */
+    .svg-icon {
+      width: 18px;
+      height: 18px;
+      fill: currentColor;
+      display: inline-block;
+      vertical-align: middle;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="form-container">
+
+    <!-- Top Form Header Card -->
+    <div class="card-header">
+      <div class="header-badge-row">
+        <span id="dbStatusBadge" class="status-badge synced">
+          <span class="dot"></span>
+          <span id="dbStatusText">Checking database...</span>
+        </span>
+        <span class="status-badge" style="background:#e8eaed; color:#3c4043;">
+          IEEE Transactions Profile: Axiom Dispatch
+        </span>
+      </div>
+      <h1 class="form-title">AI Research Intelligence Aggregator</h1>
+      <p class="form-subtitle">
+        Calibrate monitored technical lecture feeds, domain focus weights, and multi-agent ranking directives for your daily autonomous IEEE intelligence memoranda.
+      </p>
+      <div class="form-meta-divider">
+        <span id="syncFileLabel">Config Sync: config/sources.json</span>
+        <span id="statsLabel">Active Channels: -- | Total Articles: --</span>
+      </div>
+    </div>
+
+    <!-- Card 1: Subscriber Identity & Profile -->
+    <div class="form-card" id="cardProfile">
+      <div class="card-title">
+        Subscriber Identity & Distribution Appointment
+      </div>
+      <div class="card-description">
+        Identifies the recipient for daily IEEE technical digest dispatches and PDF attachments.
+      </div>
+
+      <div class="form-group">
+        <label class="field-label" for="subEmail">Recipient Email Address</label>
+        <input type="email" id="subEmail" class="text-input" placeholder="e.g. subscriber@domain.com">
+      </div>
+
+      <div class="form-group">
+        <label class="field-label" for="subName">Subscriber Full Name</label>
+        <input type="text" id="subName" class="text-input" placeholder="e.g. Dhruv Chugh">
+      </div>
+
+      <div class="form-group">
+        <label class="field-label" for="subRole">Professional Role & Engineering Specialization</label>
+        <input type="text" id="subRole" class="text-input" placeholder="e.g. AI Software Architect & Full-Stack Engineer">
+        <div class="input-helper">The Personalized Ranking Agent scores every paper and transcript against this technical appointment.</div>
+      </div>
+
+      <div class="form-group">
+        <label class="field-label">Technical Expertise Level</label>
+        <div class="radio-card-group" id="expertiseRadioGroup">
+          <label class="radio-card-option" data-level="beginner">
+            <input type="radio" name="expertise_level" value="beginner">
+            <div class="radio-option-content">
+              <strong>Beginner</strong>
+              <span>High-level conceptual overviews, introductory primers, and terminology breakdowns.</span>
+            </div>
+          </label>
+          <label class="radio-card-option" data-level="intermediate">
+            <input type="radio" name="expertise_level" value="intermediate">
+            <div class="radio-option-content">
+              <strong>Intermediate</strong>
+              <span>Practical architectural implementations, system design, and framework trade-offs.</span>
+            </div>
+          </label>
+          <label class="radio-card-option" data-level="advanced">
+            <input type="radio" name="expertise_level" value="advanced">
+            <div class="radio-option-content">
+              <strong>Advanced (Recommended)</strong>
+              <span>Algorithmic formulations, mathematical reasoning, and empirical scaling limits.</span>
+            </div>
+          </label>
+          <label class="radio-card-option" data-level="expert">
+            <input type="radio" name="expertise_level" value="expert">
+            <div class="radio-option-content">
+              <strong>Expert</strong>
+              <span>Frontier research preprints, kernel optimizations, and formal theoretical derivations.</span>
+            </div>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <!-- Card 2: Monitored YouTube Channels -->
+    <div class="form-card" id="cardChannels">
+      <div class="card-title">
+        Monitored YouTube Channels
+        <span style="font-size: 12px; font-weight: normal; color: var(--text-secondary);" id="channelCountLabel">2 Channels</span>
+      </div>
+      <div class="card-description">
+        Ingests long-form technical discussions and lectures (excluding YouTube Shorts) and transcribes spoken dialogue for LLM synthesis.
+      </div>
+
+      <!-- Live Channel List -->
+      <div class="channel-list" id="channelListContainer">
+        <!-- Rendered via JS -->
+      </div>
+
+      <!-- Inline Add Channel Form -->
+      <div class="add-channel-box">
+        <label class="field-label" style="margin-bottom: 8px;">Add YouTube Channel</label>
+        <div class="add-channel-row">
+          <input type="text" id="newChannelInput" class="text-input" placeholder="Enter @handle, URL, or Channel ID (e.g. @TwoMinutePapers)">
+          <button type="button" class="btn btn-primary" id="addChannelBtn">
+            <svg class="svg-icon" viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+            Add Channel
+          </button>
+        </div>
+        <div class="input-helper" id="addChannelHelper">
+          Supports YouTube handles (e.g. <code>@thinkschool</code>), URLs, or 24-character IDs. Metadata is automatically resolved.
+        </div>
+      </div>
+    </div>
+
+    <!-- Card 3: Frontier Lab News & Preprints -->
+    <div class="form-card" id="cardLabs">
+      <div class="card-title">
+        Frontier Laboratory Ingestion Feeds
+      </div>
+      <div class="card-description">
+        Automated ingestion of official lab preprints, engineering announcements, and safety alignment briefs.
+      </div>
+
+      <div class="source-toggle-row">
+        <div class="source-details">
+          <strong>OpenAI News & Research</strong>
+          <span>Official announcements, research blog publications, and engineering preprints.</span>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="toggleOpenAI" checked>
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <div class="source-toggle-row">
+        <div class="source-details">
+          <strong>Anthropic News, Engineering & Research</strong>
+          <span>Interpretability studies, model card evaluations, and architectural engineering releases.</span>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="toggleAnthropic" checked>
+          <span class="slider"></span>
+        </label>
+      </div>
+    </div>
+
+    <!-- Card 4: Domain Focus & Technical Interests -->
+    <div class="form-card" id="cardInterests">
+      <div class="card-title">
+        Domain Focus & Technical Interests
+      </div>
+      <div class="card-description">
+        Articles and lectures matching these technical domains receive heightened relevance scoring in the daily Two-Tier classification.
+      </div>
+
+      <div class="tags-grid" id="interestTagsContainer">
+        <!-- Chips populated dynamically -->
+      </div>
+
+      <div class="add-tag-row">
+        <input type="text" id="newTagInput" class="text-input" placeholder="Add custom domain topic (e.g. Speculative Decoding, State Space Models)">
+        <button type="button" class="btn btn-secondary" id="addTagBtn">
+          Add Topic
+        </button>
+      </div>
+    </div>
+
+    <!-- Card 5: LLM Ranking Directives -->
+    <div class="form-card" id="cardDirectives">
+      <div class="card-title">
+        Multi-Agent Ranking Directives
+      </div>
+      <div class="card-description">
+        Explicit system guidance passed directly into the DualLLM Personalized Ranking Agent during candidate evaluation.
+      </div>
+
+      <div class="form-group">
+        <textarea id="rankingDirectivesInput" class="textarea-input" placeholder="Specify instructions for candidate evaluation..."></textarea>
+      </div>
+
+      <div class="input-helper">Quick Directive Presets (Click to insert):</div>
+      <div class="directive-presets">
+        <span class="preset-pill" onclick="appendDirective('Prioritize empirical benchmarks, reproducible code, and concrete systems architectures.')">+ Empirical Benchmarks</span>
+        <span class="preset-pill" onclick="appendDirective('Filter out corporate marketing hype, funding rounds, and non-technical business interviews.')">+ Suppress Corporate Hype</span>
+        <span class="preset-pill" onclick="appendDirective('Highlight inference scaling laws, CUDA kernels, and hardware optimization techniques.')">+ Inference & CUDA</span>
+        <span class="preset-pill" onclick="appendDirective('Emphasize multi-agent orchestration patterns and autonomous tool-use frameworks.')">+ Agent Architectures</span>
+      </div>
+    </div>
+
+    <!-- Card 6: Delivery Schedule & Two-Tier Settings -->
+    <div class="form-card" id="cardSettings">
+      <div class="card-title">
+        Briefing Delivery & Classification Thresholds
+      </div>
+      <div class="card-description">
+        Configure the lookback window, Two-Tier source diversity constraints, and automated dispatch.
+      </div>
+
+      <div class="form-group">
+        <label class="field-label">Scraper Lookback Window</label>
+        <div style="display: flex; gap: 12px;">
+          <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+            <input type="radio" name="lookback_hours" value="24" checked> Last 24 Hours (Daily)
+          </label>
+          <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+            <input type="radio" name="lookback_hours" value="48"> Last 48 Hours
+          </label>
+          <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+            <input type="radio" name="lookback_hours" value="72"> Last 72 Hours (Weekend)
+          </label>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="field-label" for="maxFeaturedInput">Max Featured Strategic Deep Dives Per Source</label>
+        <input type="number" id="maxFeaturedInput" class="text-input" style="max-width: 140px;" min="1" max="5" value="2">
+        <div class="input-helper">Top N articles per source receive full half-page analyses; remaining items flow into the fast In-Brief Ecosystem Radar.</div>
+      </div>
+
+      <div class="source-toggle-row">
+        <div class="source-details">
+          <strong>Automated Daily Email Dispatch</strong>
+          <span>Send responsive IEEE memorandum email and attached 7-page PDF report upon pipeline completion.</span>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="toggleEmailDelivery" checked>
+          <span class="slider"></span>
+        </label>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Fixed Bottom Action Bar -->
+  <div class="bottom-bar">
+    <div class="bottom-bar-inner">
+      <div class="bottom-status-text" id="bottomStatusText">Ready. All modifications staged.</div>
+      <div class="bottom-btn-group">
+        <button type="button" class="btn btn-secondary" id="reloadConfigBtn">
+          Reset Changes
+        </button>
+        <button type="button" class="btn btn-primary" id="saveAllBtn">
+          Save Preferences
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div id="toastNotification" class="toast">
+    <span id="toastMessage">Preferences saved successfully.</span>
+  </div>
+
+  <script>
+    // State
+    let currentConfig = {
+      system: {},
+      sources: { youtube_channels: [], openai: {}, anthropic: {} },
+      subscriber: { interests: [] }
+    };
+
+    const DEFAULT_TOPICS = [
+      "Autonomous Multi-Agent Systems",
+      "Inference Scaling & LLM Reasoning",
+      "Foundation Model Alignment & Post-Training",
+      "Distributed Neural Architectures & Compute Scaling",
+      "Multimodal Architectures (Vision / Speech)",
+      "RAG & Knowledge Retrieval Systems",
+      "CUDA, Triton & Hardware Acceleration",
+      "Open-Weights & Parameter-Efficient Fine-Tuning",
+      "AI Safety, Red-Teaming & Interpretability"
+    ];
+
+    // Load initial data
+    async function loadData() {
+      try {
+        const resp = await fetch("/api/config");
+        if (!resp.ok) throw new Error("Failed to load configuration");
+        currentConfig = await resp.json();
+        renderUI();
+      } catch (err) {
+        showToast("Error loading configuration: " + err.message, true);
+      }
+    }
+
+    function renderUI() {
+      const { system, sources, subscriber } = currentConfig;
+
+      // Status Badge
+      const dbBadge = document.getElementById("dbStatusBadge");
+      const dbText = document.getElementById("dbStatusText");
+      if (system.db_connected) {
+        dbBadge.className = "status-badge synced";
+        dbText.textContent = "Database Connected (PostgreSQL)";
+      } else {
+        dbBadge.className = "status-badge offline";
+        dbText.textContent = "Local File Storage Mode (PostgreSQL Offline)";
+      }
+
+      // Stats
+      const activeChannels = (sources.youtube_channels || []).filter(c => c.is_active).length;
+      document.getElementById("statsLabel").textContent =
+        `Active Channels: ${activeChannels}/${sources.youtube_channels.length} | Ingested Articles: ${system.total_articles || 0}`;
+      document.getElementById("channelCountLabel").textContent =
+        `${sources.youtube_channels.length} Channels Tracked`;
+
+      // Subscriber inputs
+      document.getElementById("subEmail").value = subscriber.email || "";
+      document.getElementById("subName").value = subscriber.name || "";
+      document.getElementById("subRole").value = subscriber.bio_or_role || "";
+
+      // Expertise Level
+      const level = subscriber.expertise_level || "advanced";
+      document.querySelectorAll("#expertiseRadioGroup .radio-card-option").forEach(opt => {
+        const val = opt.getAttribute("data-level");
+        const radio = opt.querySelector("input[type='radio']");
+        if (val === level) {
+          opt.classList.add("selected");
+          radio.checked = true;
+        } else {
+          opt.classList.remove("selected");
+          radio.checked = false;
+        }
+      });
+
+      // Lab Toggles
+      document.getElementById("toggleOpenAI").checked = sources.openai ? sources.openai.is_active : true;
+      document.getElementById("toggleAnthropic").checked = sources.anthropic ? sources.anthropic.is_active : true;
+
+      // Ranking Directives
+      document.getElementById("rankingDirectivesInput").value = subscriber.ranking_instructions || "";
+
+      // Pipeline Settings
+      document.getElementById("maxFeaturedInput").value = subscriber.max_featured_per_source || 2;
+      document.getElementById("toggleEmailDelivery").checked = subscriber.email_delivery_enabled !== false;
+      const hoursVal = String(subscriber.lookback_hours || 24);
+      document.querySelectorAll("input[name='lookback_hours']").forEach(r => {
+        r.checked = (r.value === hoursVal);
+      });
+
+      // Render Channel List
+      renderChannels(sources.youtube_channels || []);
+
+      // Render Topics
+      renderTopics(subscriber.interests || []);
+    }
+
+    function renderChannels(channels) {
+      const container = document.getElementById("channelListContainer");
+      container.innerHTML = "";
+
+      if (channels.length === 0) {
+        container.innerHTML = `
+          <div style="padding: 16px; text-align: center; color: var(--text-secondary); font-size: 13px;">
+            No channels currently monitored. Use the box below to add a YouTube channel.
+          </div>
+        `;
+        return;
+      }
+
+      channels.forEach(ch => {
+        const item = document.createElement("div");
+        item.className = "channel-item" + (ch.is_active ? "" : " inactive");
+
+        item.innerHTML = `
+          <div class="channel-item-left">
+            <div class="channel-icon">
+              <svg class="svg-icon" viewBox="0 0 24 24"><path d="M21.58 7.19c-.23-.86-.91-1.54-1.77-1.77C18.25 5 12 5 12 5s-6.25 0-7.81.42c-.86.23-1.54.91-1.77 1.77C2 8.75 2 12 2 12s0 3.25.42 4.81c.23.86.91 1.54 1.77 1.77C5.75 19 12 19 12 19s6.25 0 7.81-.42c.86-.23 1.54-.91 1.77-1.77C22 15.25 22 12 22 12s0-3.25-.42-4.81zM10 15V9l5.2 3-5.2 3z"/></svg>
+            </div>
+            <div class="channel-info">
+              <div class="channel-name">${escapeHtml(ch.name)}</div>
+              <div class="channel-submeta">
+                <span class="channel-badge">${escapeHtml(ch.handle || ch.channel_id)}</span>
+                <span>ID: ${escapeHtml(ch.channel_id.substring(0, 10))}...</span>
+              </div>
+            </div>
+          </div>
+          <div class="channel-actions">
+            <a href="${escapeHtml(ch.url)}" target="_blank" class="icon-btn" title="Open YouTube Channel">
+              <svg class="svg-icon" viewBox="0 0 24 24"><path d="M19 19H5V5h7V3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z"/></svg>
+            </a>
+            <label class="switch" title="Toggle Active Monitoring">
+              <input type="checkbox" ${ch.is_active ? "checked" : ""} onchange="toggleChannel('${ch.channel_id}', this.checked)">
+              <span class="slider"></span>
+            </label>
+            <button type="button" class="icon-btn delete-btn" title="Remove Channel" onclick="deleteChannel('${ch.channel_id}', '${escapeHtml(ch.name)}')">
+              <svg class="svg-icon" viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+            </button>
+          </div>
+        `;
+
+        container.appendChild(item);
+      });
+    }
+
+    function renderTopics(selectedInterests) {
+      const container = document.getElementById("interestTagsContainer");
+      container.innerHTML = "";
+
+      // Combine defaults and custom tags
+      const allTopics = Array.from(new Set([...DEFAULT_TOPICS, ...selectedInterests]));
+
+      allTopics.forEach(topic => {
+        const isSelected = selectedInterests.includes(topic);
+        const chip = document.createElement("span");
+        chip.className = "topic-chip" + (isSelected ? " active" : "");
+
+        chip.innerHTML = `
+          <svg class="svg-icon chip-check" viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+          <span>${escapeHtml(topic)}</span>
+          ${!DEFAULT_TOPICS.includes(topic) ? `<span class="chip-remove" onclick="removeCustomTopic(event, '${escapeHtml(topic)}')">&times;</span>` : ""}
+        `;
+
+        chip.onclick = (e) => {
+          if (e.target.classList.contains("chip-remove")) return;
+          toggleTopic(topic);
+        };
+
+        container.appendChild(chip);
+      });
+    }
+
+    function toggleTopic(topic) {
+      let interests = currentConfig.subscriber.interests || [];
+      if (interests.includes(topic)) {
+        interests = interests.filter(t => t !== topic);
+      } else {
+        interests.push(topic);
+      }
+      currentConfig.subscriber.interests = interests;
+      renderTopics(interests);
+      markStaged();
+    }
+
+    function removeCustomTopic(e, topic) {
+      e.stopPropagation();
+      let interests = currentConfig.subscriber.interests || [];
+      interests = interests.filter(t => t !== topic);
+      currentConfig.subscriber.interests = interests;
+      renderTopics(interests);
+      markStaged();
+    }
+
+    // Channel Actions
+    async function toggleChannel(channelId, isActive) {
+      try {
+        const resp = await fetch(`/api/channels/${encodeURIComponent(channelId)}/toggle`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ is_active: isActive })
+        });
+        if (!resp.ok) throw new Error("Failed to toggle channel");
+        showToast(isActive ? "Channel activated" : "Channel muted");
+        await loadData();
+      } catch (err) {
+        showToast("Error toggling channel: " + err.message, true);
+        await loadData();
+      }
+    }
+
+    async function deleteChannel(channelId, channelName) {
+      if (!confirm(`Are you sure you want to stop monitoring '${channelName}'?`)) return;
+
+      try {
+        const resp = await fetch(`/api/channels/${encodeURIComponent(channelId)}`, {
+          method: "DELETE"
+        });
+        if (!resp.ok) throw new Error("Failed to remove channel");
+        showToast(`Removed channel '${channelName}'`);
+        await loadData();
+      } catch (err) {
+        showToast("Error removing channel: " + err.message, true);
+      }
+    }
+
+    async function addChannel() {
+      const input = document.getElementById("newChannelInput");
+      const btn = document.getElementById("addChannelBtn");
+      const ident = input.value.trim();
+
+      if (!ident) {
+        input.focus();
+        return;
+      }
+
+      btn.disabled = true;
+      btn.innerHTML = `<span style="display:inline-block; animation: spin 1s infinite linear;">⟳</span> Resolving...`;
+
+      try {
+        const resp = await fetch("/api/channels", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ identifier: ident })
+        });
+
+        const data = await resp.json();
+        if (!resp.ok) {
+          throw new Error(data.detail || "Failed to add channel");
+        }
+
+        input.value = "";
+        showToast(`Added channel '${data.channel.name}' successfully!`);
+        await loadData();
+      } catch (err) {
+        showToast(err.message, true);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = `<svg class="svg-icon" viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg> Add Channel`;
+      }
+    }
+
+    // Save All Preferences
+    async function savePreferences() {
+      const btn = document.getElementById("saveAllBtn");
+      btn.disabled = true;
+      btn.textContent = "Saving...";
+
+      try {
+        // Collect expertise level
+        let expertise = "advanced";
+        const selectedRadio = document.querySelector("input[name='expertise_level']:checked");
+        if (selectedRadio) expertise = selectedRadio.value;
+
+        // Collect lookback hours
+        let lookback = 24;
+        const selectedLookback = document.querySelector("input[name='lookback_hours']:checked");
+        if (selectedLookback) lookback = parseInt(selectedLookback.value, 10);
+
+        const payload = {
+          email: document.getElementById("subEmail").value.trim(),
+          name: document.getElementById("subName").value.trim(),
+          is_active: true,
+          bio_or_role: document.getElementById("subRole").value.trim(),
+          expertise_level: expertise,
+          interests: currentConfig.subscriber.interests || [],
+          preferred_sources: currentConfig.subscriber.preferred_sources || [],
+          ranking_instructions: document.getElementById("rankingDirectivesInput").value.trim(),
+          lookback_hours: lookback,
+          max_featured_per_source: parseInt(document.getElementById("maxFeaturedInput").value, 10) || 2,
+          email_delivery_enabled: document.getElementById("toggleEmailDelivery").checked
+        };
+
+        const resp = await fetch("/api/config", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+
+        if (!resp.ok) throw new Error("Failed to save preferences");
+
+        // Also update lab source states
+        await fetch("/api/sources/labs", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            openai_active: document.getElementById("toggleOpenAI").checked,
+            anthropic_active: document.getElementById("toggleAnthropic").checked
+          })
+        });
+
+        showToast("All preferences saved successfully!");
+        document.getElementById("bottomStatusText").textContent = "All changes saved to sources.json & database.";
+        await loadData();
+      } catch (err) {
+        showToast("Save failed: " + err.message, true);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "Save Preferences";
+      }
+    }
+
+    function appendDirective(text) {
+      const area = document.getElementById("rankingDirectivesInput");
+      const current = area.value.trim();
+      if (current.includes(text)) return;
+      area.value = current ? `${current}\n${text}` : text;
+      markStaged();
+    }
+
+    function markStaged() {
+      document.getElementById("bottomStatusText").textContent = "Unsaved changes staged.";
+    }
+
+    function showToast(msg, isError = false) {
+      const toast = document.getElementById("toastNotification");
+      const msgSpan = document.getElementById("toastMessage");
+      msgSpan.textContent = msg;
+      toast.className = "toast show" + (isError ? " error" : "");
+      setTimeout(() => {
+        toast.className = "toast";
+      }, 3500);
+    }
+
+    function escapeHtml(text) {
+      if (!text) return "";
+      const div = document.createElement("div");
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // Event Listeners
+    document.getElementById("addChannelBtn").onclick = addChannel;
+    document.getElementById("newChannelInput").addEventListener("keypress", (e) => {
+      if (e.key === "Enter") addChannel();
+    });
+
+    document.getElementById("addTagBtn").onclick = () => {
+      const input = document.getElementById("newTagInput");
+      const tag = input.value.trim();
+      if (!tag) return;
+      if (!currentConfig.subscriber.interests.includes(tag)) {
+        currentConfig.subscriber.interests.push(tag);
+        renderTopics(currentConfig.subscriber.interests);
+        markStaged();
+      }
+      input.value = "";
+    };
+
+    document.getElementById("newTagInput").addEventListener("keypress", (e) => {
+      if (e.key === "Enter") document.getElementById("addTagBtn").click();
+    });
+
+    document.getElementById("saveAllBtn").onclick = savePreferences;
+    document.getElementById("reloadConfigBtn").onclick = loadData;
+
+    // Expertise Radio Card Clicks
+    document.querySelectorAll("#expertiseRadioGroup .radio-card-option").forEach(card => {
+      card.onclick = () => {
+        const radio = card.querySelector("input[type='radio']");
+        radio.checked = true;
+        document.querySelectorAll("#expertiseRadioGroup .radio-card-option").forEach(c => c.classList.remove("selected"));
+        card.classList.add("selected");
+        markStaged();
+      };
+    });
+
+    // Mark staged on input
+    ["subEmail", "subName", "subRole", "rankingDirectivesInput", "maxFeaturedInput"].forEach(id => {
+      document.getElementById(id).addEventListener("input", markStaged);
+    });
+    ["toggleOpenAI", "toggleAnthropic", "toggleEmailDelivery"].forEach(id => {
+      document.getElementById(id).addEventListener("change", markStaged);
+    });
+
+    // Initial Load
+    window.onload = loadData;
+  </script>
+</body>
+</html>
+

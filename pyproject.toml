@@ -11,6 +11,7 @@ dependencies = [
     "apscheduler>=3.11.3",
     "beautifulsoup4>=4.15.0",
     "click>=8.5.0",
+    "fastapi>=0.162.2",
     "feedparser>=6.0.14",
     "google-genai>=2.34.0",
     "httpx>=0.28.1",
@@ -25,6 +26,7 @@ dependencies = [
     "python-dotenv>=1.2.4",
     "reportlab>=5.1.0",
     "sqlalchemy>=2.1.6",
+    "uvicorn>=0.54.0",
     "youtube-transcript-api>=1.2.4",
     "yt-dlp>=2026.10.26",
 ]
@@ -34,6 +36,7 @@ ai-research-aggregator = "app.agent.email_agent:main"
 ai-briefing = "app.agent.email_agent:main"
 ai-ranker = "app.agent.ranking_agent:main"
 ai-scraper = "app.scrapers.runner:main"
+ai-form = "app.web.server:start"
 
 [build-system]
 requires = ["uv_build>=0.13.6,<0.14.0"]

@@ -32,6 +32,8 @@ services:
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-ai_news_db}
       ENVIRONMENT: production
+    ports:
+      - "${WEB_PORT:-8000}:8000"
     volumes:
       - ./exports:/app/exports
     command: ["uv", "run", "python", "-m", "app.agent.ranking_agent", "--daemon", "--interval-hours", "24"]
