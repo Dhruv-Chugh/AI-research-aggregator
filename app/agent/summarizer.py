@@ -187,7 +187,7 @@ class DigestAgent:
         self,
         source_type: Optional[str] = None,
         unsummarized_only: bool = True,
-        limit: Optional[int] = None,
+        limit: Optional[int] = 12,
         force: bool = False,
         dry_run: bool = False,
         provider_override: Optional[str] = None,
@@ -217,6 +217,10 @@ class DigestAgent:
                 # Record model breakdown
                 m = result.model_used
                 report.model_breakdown[m] = report.model_breakdown.get(m, 0) + 1
+
+                # Polite pause to stay well within Gemini free-tier rate limits
+                import time
+                time.sleep(1.0)
 
             except Exception as e:
                 logger.error("Failed to process article ID=%d: %s", art.id, e, exc_info=True)

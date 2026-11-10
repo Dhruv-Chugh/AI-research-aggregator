@@ -75,7 +75,7 @@ class DualLLMClient:
         self.gemini_api_key = gemini_api_key or os.getenv("GEMINI_API_KEY")
 
         self.openai_model = openai_model or os.getenv("OPENAI_MODEL", "gpt-4o-mini")
-        self.gemini_model = gemini_model or os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
+        self.gemini_model = gemini_model or os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 
         self.openai_token_threshold = openai_token_threshold
         self.preferred_provider = preferred_provider.lower().strip()
@@ -105,13 +105,16 @@ class DualLLMClient:
         return self._openai_client
 
     def get_gemini_client(self) -> Any:
-        """Lazily initialize and return Google GenAI SDK client."""
+        """Lazily initialize and return Google GenAI SDK client with a 15-second timeout."""
         if self._gemini_client is None:
             if not self.has_gemini_key:
                 raise ValueError("GEMINI_API_KEY is not set.")
             from google import genai
+            from google.genai import types
 
-            self._gemini_client = genai.Client(api_key=self.gemini_api_key)
+            # Set a 15-second request timeout to prevent SDK retry loops from stalling execution
+            http_opts = types.HttpOptions(timeout=15_000)
+            self._gemini_client = genai.Client(api_key=self.gemini_api_key, http_options=http_opts)
         return self._gemini_client
 
     def generate_digest(
@@ -276,19 +279,23 @@ class DualLLMClient:
         except Exception as inter_err:
             logger.debug("Interactions API direct invocation note: %s. Trying generate_content fallback.", inter_err)
             # 2. Fallback to client.models.generate_content for maximum SDK compatibility
-            from google.genai import types
+            try:
+                from google.genai import types
 
-            response = client.models.generate_content(
-                model=self.gemini_model,
-                contents=[SYSTEM_PROMPT, user_content],
-                config=types.GenerateContentConfig(
-                    response_mime_type="application/json",
-                    response_schema=ArticleDigestOutput,
-                ),
-            )
-            raw_output_text = response.text
-            if hasattr(response, "usage_metadata") and response.usage_metadata:
-                tokens_used = getattr(response.usage_metadata, "total_token_count", None)
+                response = client.models.generate_content(
+                    model=self.gemini_model,
+                    contents=[SYSTEM_PROMPT, user_content],
+                    config=types.GenerateContentConfig(
+                        response_mime_type="application/json",
+                        response_schema=ArticleDigestOutput,
+                    ),
+                )
+                raw_output_text = response.text
+                if hasattr(response, "usage_metadata") and response.usage_metadata:
+                    tokens_used = getattr(response.usage_metadata, "total_token_count", None)
+            except Exception as gen_err:
+                logger.warning("Gemini generate_content also failed: %s", gen_err)
+                raise RuntimeError(f"Gemini generation failed: {inter_err}; {gen_err}")
 
         if not raw_output_text:
             raise ValueError("Gemini API returned empty text output.")

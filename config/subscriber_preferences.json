@@ -1,12 +1,22 @@
 {
-  "email": "",
-  "name": "",
+  "email": "dhruvchugh2007@gmail.com",
+  "name": "Dhruv Chugh",
   "is_active": true,
   "bio_or_role": "AI Software Architect & Researcher",
   "expertise_level": "advanced",
-  "interests": [],
-  "preferred_sources": [],
-  "ranking_instructions": "Prioritize production architectures, open-weights releases, and practical implementation details. De-prioritize high-level corporate hype and financing rounds.",
+  "interests": [
+    "Autonomous Multi-Agent Systems",
+    "Inference Scaling & LLM Reasoning",
+    "Distributed Neural Architectures & Compute Scaling",
+    "Multimodal Architectures (Vision / Speech)",
+    "RAG & Knowledge Retrieval Systems"
+  ],
+  "preferred_sources": [
+    "Anthropic",
+    "OpenAI",
+    "YouTube"
+  ],
+  "ranking_instructions": "Prioritize production architectures, open-weights releases, and practical implementation details. De-prioritize high-level corporate hype and financing rounds. Emphasize multi-agent orchestration patterns and autonomous tool-use frameworks.",
   "lookback_hours": 24,
   "max_featured_per_source": 2,
   "email_delivery_enabled": true

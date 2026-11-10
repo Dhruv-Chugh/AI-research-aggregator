@@ -70,16 +70,23 @@ _pipeline_state: Dict[str, Any] = {
 
 # Default subscriber preferences
 DEFAULT_SUBSCRIBER = {
-    "email": "",
-    "name": "",
+    "email": os.getenv("RECIPIENT_EMAIL", "dhruvchugh2007@gmail.com"),
+    "name": os.getenv("SUBSCRIBER_NAME", "Dhruv Chugh"),
     "is_active": True,
     "bio_or_role": "AI Software Architect & Researcher",
     "expertise_level": "advanced",
-    "interests": [],
-    "preferred_sources": [],
+    "interests": [
+        "Autonomous Multi-Agent Systems",
+        "Inference Scaling & LLM Reasoning",
+        "Distributed Neural Architectures & Compute Scaling",
+        "Multimodal Architectures (Vision / Speech)",
+        "RAG & Knowledge Retrieval Systems",
+    ],
+    "preferred_sources": ["Anthropic", "OpenAI", "YouTube"],
     "ranking_instructions": (
         "Prioritize production architectures, open-weights releases, and practical implementation details. "
-        "De-prioritize high-level corporate hype and financing rounds."
+        "De-prioritize high-level corporate hype and financing rounds. "
+        "Emphasize multi-agent orchestration patterns and autonomous tool-use frameworks."
     ),
     "lookback_hours": 24,
     "max_featured_per_source": 2,
@@ -117,6 +124,12 @@ def auto_init_database() -> bool:
             logger.info("PostgreSQL database detected. Running schema migrations and seeding...")
             create_tables(engine)
             seed_initial_data(engine)
+
+            # Ensure subscriber preferences from config are synced to PostgreSQL on startup
+            pref = load_local_preferences()
+            if pref.get("email"):
+                sync_subscriber_to_db(pref)
+                logger.info("Synced subscriber profile for %s (%s) to database.", pref.get("name"), pref.get("email"))
 
             logger.info("Database initialized successfully.")
             return True

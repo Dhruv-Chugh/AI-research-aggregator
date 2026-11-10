@@ -47,7 +47,9 @@ services:
       - key: SMTP_PORT
         value: "587"
       - key: RECIPIENT_EMAIL
-        sync: false
+        value: dhruvchugh2007@gmail.com
+      - key: SUBSCRIBER_NAME
+        value: Dhruv Chugh
       - key: SMTP_USER
         sync: false
       - key: SMTP_PASSWORD
@@ -55,6 +57,4 @@ services:
       - key: GEMINI_API_KEY
         sync: false
       - key: OPENAI_API_KEY
-        sync: false
-      - key: SUBSCRIBER_NAME
         sync: false
