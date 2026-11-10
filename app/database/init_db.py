@@ -79,8 +79,8 @@ def seed_initial_data(engine: Engine) -> None:
 
         # 2. Seed default subscriber
         import os
-        default_email = os.getenv("RECIPIENT_EMAIL", "").strip().lower()
-        sub_name = os.getenv("SUBSCRIBER_NAME", "Research Practitioner").strip()
+        default_email = os.getenv("RECIPIENT_EMAIL", "dhruvchugh2007@gmail.com").strip().lower()
+        sub_name = os.getenv("SUBSCRIBER_NAME", "Dhruv Chugh").strip()
         if default_email:
             sub = repo.subscribers.get_by_email(default_email)
             if not sub:

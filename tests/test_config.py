@@ -10,14 +10,10 @@ from app.models.youtube import ChannelConfig
 
 
 def test_sources_config_defaults():
-    """Verify default sources configuration contains Think School and Raj Shamani."""
+    """Verify default sources configuration contains no pre-configured channels by default and OpenAI/Anthropic active."""
     cfg = SourcesConfig.get_default()
     channels = cfg.youtube_channels
-    assert len(channels) == 2
-
-    channel_ids = [c.channel_id for c in channels]
-    assert "UCKZozRVHRYsYHGEyNKuhhdA" in channel_ids  # Think School
-    assert "UCzwCEE_PchiBULMnAJqhGVg" in channel_ids  # Raj Shamani
+    assert len(channels) == 0
     assert cfg.openai.is_active is True
     assert cfg.anthropic.is_active is True
 
@@ -42,7 +38,7 @@ def test_sources_config_save_and_load(tmp_path):
 
     # Load back
     loaded_cfg = SourcesConfig.load_from_file(test_file)
-    assert len(loaded_cfg.youtube_channels) == 3
+    assert len(loaded_cfg.youtube_channels) == 1
     assert any(c.channel_id == "UC1234567890123456789012" for c in loaded_cfg.youtube_channels)
 
 
@@ -79,5 +75,7 @@ def test_sources_config_load_fallback_when_corrupted(tmp_path):
     bad_file.write_text("{invalid json: broken}", encoding="utf-8")
 
     cfg = SourcesConfig.load_from_file(bad_file)
-    assert len(cfg.youtube_channels) >= 2
+    assert len(cfg.youtube_channels) == 0
+    assert cfg.openai.is_active is True
+    assert cfg.anthropic.is_active is True
 

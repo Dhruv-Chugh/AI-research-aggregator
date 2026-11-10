@@ -268,6 +268,6 @@ def test_trigger_pipeline_now_mocked(monkeypatch):
             assert response.status_code == 200
             data = response.json()
             assert data["status"] == "started"
-            assert "Full 24-hour pipeline launched" in data["message"]
+            assert "Autonomous pipeline launched in background" in data["message"]
 
     _run_async(_test())

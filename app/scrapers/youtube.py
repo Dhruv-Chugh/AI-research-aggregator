@@ -111,7 +111,7 @@ class ChannelResolver:
 class FeedParserClient:
     """Class responsible for fetching raw YouTube RSS XML and parsing into Pydantic models."""
 
-    def __init__(self, client: httpx.Client, check_shorts: bool = True) -> None:
+    def __init__(self, client: httpx.Client, check_shorts: bool = False) -> None:
         self.client = client
         self.check_shorts = check_shorts
         self._shorts_cache: Dict[str, bool] = {}
@@ -123,18 +123,19 @@ class FeedParserClient:
         description: str = "",
         url: str = "",
     ) -> bool:
-        """Accurately determine whether a video is a YouTube Short."""
+        """Accurately determine whether a video is a YouTube Short using fast, bot-safe heuristics."""
         if video_id in self._shorts_cache:
             return self._shorts_cache[video_id]
 
-        # 1. Fast heuristics: explicit /shorts/ URL or hashtags
+        # 1. Fast heuristics: explicit /shorts/ URL or hashtags in title/description
         if "/shorts/" in url:
             self._shorts_cache[video_id] = True
             return True
 
         lower_t = title.lower() if title else ""
         lower_d = description.lower() if description else ""
-        if "#shorts" in lower_t or "#short" in lower_t or "#shorts" in lower_d or "#short" in lower_d:
+        short_tags = ["#shorts", "#short", "#ytshorts", "#youtubeshorts", "#shortsvideo"]
+        if any(tag in lower_t or tag in lower_d for tag in short_tags):
             self._shorts_cache[video_id] = True
             return True
 
@@ -275,7 +276,7 @@ class YouTubeService:
         channels: Optional[List[Union[ChannelConfig, Dict[str, Any], str]]] = None,
         timeout: float = 15.0,
         proxy_url: Optional[str] = None,
-        check_shorts: bool = True,
+        check_shorts: bool = False,
     ) -> None:
         """Initialize the YouTubeService.
 

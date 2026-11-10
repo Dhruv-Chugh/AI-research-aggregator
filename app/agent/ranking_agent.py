@@ -195,9 +195,9 @@ class UserRankingAgent:
         )
         records = list(self.session.execute(stmt).scalars().all())
 
-        # Fallback to recent digests if none found in exact window (e.g. testing or older scrapes)
-        if not records:
-            logger.info("No digests created in last %d hours. Fetching recent digests...", hours)
+        # Fallback / augment with recent digests if fewer than 3 found in exact window (e.g. testing or quiet news days)
+        if len(records) < 3:
+            logger.info("Only %d digests created in last %d hours. Fetching recent digests...", len(records), hours)
             stmt = select(ArticleDigest).order_by(desc(ArticleDigest.created_at)).limit(limit)
             records = list(self.session.execute(stmt).scalars().all())
 

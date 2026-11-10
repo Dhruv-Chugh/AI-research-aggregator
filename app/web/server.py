@@ -70,8 +70,8 @@ _pipeline_state: Dict[str, Any] = {
 
 # Default subscriber preferences
 DEFAULT_SUBSCRIBER = {
-    "email": os.getenv("RECIPIENT_EMAIL", ""),
-    "name": os.getenv("SUBSCRIBER_NAME", "Research Practitioner"),
+    "email": os.getenv("RECIPIENT_EMAIL", "dhruvchugh2007@gmail.com"),
+    "name": os.getenv("SUBSCRIBER_NAME", "Dhruv Chugh"),
     "is_active": True,
     "bio_or_role": "AI Software Architect & Researcher",
     "expertise_level": "advanced",
@@ -110,10 +110,14 @@ def load_local_preferences() -> Dict[str, Any]:
     env_email = os.getenv("RECIPIENT_EMAIL", "").strip()
     if env_email:
         merged["email"] = env_email
+    elif not merged.get("email"):
+        merged["email"] = "dhruvchugh2007@gmail.com"
 
     env_name = os.getenv("SUBSCRIBER_NAME", "").strip()
     if env_name:
         merged["name"] = env_name
+    elif not merged.get("name"):
+        merged["name"] = "Dhruv Chugh"
 
     return merged
 

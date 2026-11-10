@@ -47,9 +47,9 @@ services:
       - key: SMTP_PORT
         value: "587"
       - key: RECIPIENT_EMAIL
-        sync: false
+        value: dhruvchugh2007@gmail.com
       - key: SUBSCRIBER_NAME
-        sync: false
+        value: Dhruv Chugh
       - key: SMTP_USER
         sync: false
       - key: SMTP_PASSWORD

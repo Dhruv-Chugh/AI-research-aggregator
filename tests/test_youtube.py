@@ -334,6 +334,7 @@ def test_youtube_shorts_detection_heuristics():
 def test_feed_parser_probe_shorts(youtube_service):
     """FeedParserClient probes /shorts/ endpoint and accurately identifies Shorts."""
     client = youtube_service.feed_parser
+    client.check_shorts = True
 
     # Mock HEAD response for short: status 200
     mock_resp_short = MagicMock(status_code=200)
