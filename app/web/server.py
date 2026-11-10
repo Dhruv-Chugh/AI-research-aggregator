@@ -225,16 +225,9 @@ def get_db_status_and_subscriber() -> tuple[bool, Dict[str, Any], int, Optional[
             subscriber = session.execute(sub_stmt).scalar_one_or_none()
 
             if subscriber:
-                clean_email = subscriber.email or ""
-                if any(x in clean_email.lower() for x in ["dhruv", "chugh", "byteme"]):
-                    clean_email = ""
-                clean_name = subscriber.name or pref.get("name") or ""
-                if "dhruv" in clean_name.lower():
-                    clean_name = ""
-
                 sub_data = {
-                    "email": clean_email,
-                    "name": clean_name,
+                    "email": subscriber.email or "",
+                    "name": subscriber.name or pref.get("name") or "",
                     "is_active": subscriber.is_active,
                     "bio_or_role": subscriber.bio_or_role or pref.get("bio_or_role"),
                     "expertise_level": subscriber.expertise_level or pref.get("expertise_level"),
@@ -247,13 +240,7 @@ def get_db_status_and_subscriber() -> tuple[bool, Dict[str, Any], int, Optional[
                 }
                 return True, sub_data, article_count, latest_str
 
-            clean_pref = dict(pref)
-            if any(x in str(clean_pref.get("email", "")).lower() for x in ["dhruv", "chugh", "byteme"]):
-                clean_pref["email"] = ""
-            if "dhruv" in str(clean_pref.get("name", "")).lower():
-                clean_pref["name"] = ""
-
-            return True, clean_pref, article_count, latest_str
+            return True, dict(pref), article_count, latest_str
     except Exception as e:
         logger.debug("Database probe fallback: %s", e)
         return False, load_local_preferences(), 0, None
@@ -271,6 +258,8 @@ def sync_subscriber_to_db(prefs: Dict[str, Any]) -> bool:
 
         with get_db_session() as session:
             email = prefs.get("email", DEFAULT_SUBSCRIBER["email"]).strip().lower()
+            if not email:
+                return False
             stmt = select(Subscriber).where(Subscriber.email == email)
             subscriber = session.execute(stmt).scalar_one_or_none()
 
@@ -549,15 +538,13 @@ async def delete_channel(channel_id: str):
     """Remove a YouTube channel from the monitored list."""
     target_id = channel_id.strip()
     cfg = get_sources_config(DEFAULT_SOURCES_PATH)
-    removed = cfg.remove_youtube_channel(target_id)
-
-    if not removed:
-        raise HTTPException(status_code=404, detail=f"Channel with ID '{target_id}' not found.")
-
-    cfg.save_to_file(DEFAULT_SOURCES_PATH)
-    logger.info("Removed channel '%s' from %s", target_id, DEFAULT_SOURCES_PATH)
+    removed_from_cfg = cfg.remove_youtube_channel(target_id)
+    if removed_from_cfg:
+        cfg.save_to_file(DEFAULT_SOURCES_PATH)
+        logger.info("Removed channel '%s' from %s", target_id, DEFAULT_SOURCES_PATH)
 
     # Sync DB if connected
+    db_removed = False
     try:
         from app.database import check_connection, get_db_session
         from app.database.models import Source
@@ -565,13 +552,19 @@ async def delete_channel(channel_id: str):
 
         if check_connection():
             with get_db_session() as session:
-                stmt = select(Source).where(Source.channel_id == target_id)
+                stmt = select(Source).where(
+                    (Source.channel_id == target_id) | (Source.channel_id.ilike(target_id))
+                )
                 source = session.execute(stmt).scalar_one_or_none()
                 if source:
                     source.is_active = False
                     session.commit()
+                    db_removed = True
     except Exception as e:
         logger.debug("Database channel removal sync note: %s", e)
+
+    if not removed_from_cfg and not db_removed:
+        raise HTTPException(status_code=404, detail=f"Channel with ID '{target_id}' not found.")
 
     return {
         "status": "success",
@@ -585,20 +578,19 @@ async def toggle_channel_state(channel_id: str, payload: ToggleChannelRequest):
     """Toggle a YouTube channel active/inactive without deleting it."""
     target_id = channel_id.strip().lower()
     cfg = get_sources_config(DEFAULT_SOURCES_PATH)
-    found = False
+    found_in_cfg = False
 
     for c in cfg.youtube_channels:
         if c.channel_id.lower() == target_id or (c.handle and c.handle.lower() == target_id):
             c.is_active = payload.is_active
-            found = True
+            found_in_cfg = True
             break
 
-    if not found:
-        raise HTTPException(status_code=404, detail=f"Channel '{channel_id}' not found.")
-
-    cfg.save_to_file(DEFAULT_SOURCES_PATH)
+    if found_in_cfg:
+        cfg.save_to_file(DEFAULT_SOURCES_PATH)
 
     # Sync DB
+    db_updated = False
     try:
         from app.database import check_connection, get_db_session
         from app.database.models import Source
@@ -606,13 +598,19 @@ async def toggle_channel_state(channel_id: str, payload: ToggleChannelRequest):
 
         if check_connection():
             with get_db_session() as session:
-                stmt = select(Source).where(Source.channel_id == channel_id)
+                stmt = select(Source).where(
+                    (Source.channel_id == channel_id) | (Source.channel_id.ilike(channel_id))
+                )
                 source = session.execute(stmt).scalar_one_or_none()
                 if source:
                     source.is_active = payload.is_active
                     session.commit()
+                    db_updated = True
     except Exception as e:
         logger.debug("Database toggle sync note: %s", e)
+
+    if not found_in_cfg and not db_updated:
+        raise HTTPException(status_code=404, detail=f"Channel '{channel_id}' not found.")
 
     return {
         "status": "success",
