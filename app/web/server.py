@@ -70,8 +70,8 @@ _pipeline_state: Dict[str, Any] = {
 
 # Default subscriber preferences
 DEFAULT_SUBSCRIBER = {
-    "email": os.getenv("RECIPIENT_EMAIL", "dhruvchugh2007@gmail.com"),
-    "name": os.getenv("SUBSCRIBER_NAME", "Dhruv Chugh"),
+    "email": os.getenv("RECIPIENT_EMAIL", ""),
+    "name": os.getenv("SUBSCRIBER_NAME", "Research Practitioner"),
     "is_active": True,
     "bio_or_role": "AI Software Architect & Researcher",
     "expertise_level": "advanced",
@@ -95,16 +95,27 @@ DEFAULT_SUBSCRIBER = {
 
 
 def load_local_preferences() -> Dict[str, Any]:
-    """Load cached subscriber preferences from disk with default fallback."""
+    """Load cached subscriber preferences from disk with environment fallback."""
+    merged = dict(DEFAULT_SUBSCRIBER)
     if PREFERENCES_PATH.exists():
         try:
             data = json.loads(PREFERENCES_PATH.read_text(encoding="utf-8"))
-            merged = dict(DEFAULT_SUBSCRIBER)
-            merged.update(data)
-            return merged
+            for k, v in data.items():
+                if v is not None and (v != "" or k not in ("email", "name")):
+                    merged[k] = v
         except Exception as e:
             logger.warning("Error reading local preferences: %s. Using defaults.", e)
-    return dict(DEFAULT_SUBSCRIBER)
+
+    # Ingest environment variables if email or name are configured
+    env_email = os.getenv("RECIPIENT_EMAIL", "").strip()
+    if env_email:
+        merged["email"] = env_email
+
+    env_name = os.getenv("SUBSCRIBER_NAME", "").strip()
+    if env_name:
+        merged["name"] = env_name
+
+    return merged
 
 
 def save_local_preferences(prefs: Dict[str, Any]) -> None:

@@ -235,24 +235,24 @@ uv run python -m app.database.init_db --seed
 
 ## 🚀 One-Click Cloud Deployment (Render.com)
 
-The repository includes a production-ready **Render Blueprint** ([`render.yaml`](render.yaml)) configured for the `deploy` branch that provisions:
+The repository includes a production-ready **Render Blueprint** ([`render.yaml`](render.yaml)) configured for the `deployment-part-2` branch that provisions:
 1. **Managed PostgreSQL Database** (`ai-news-db`): Dedicated PostgreSQL 16 database with persistent storage and auto-SSL.
-2. **Web & Scheduling Service** (`ai-research-aggregator`): Docker container running the Google/Microsoft Forms configuration portal on port `8000` alongside an automated 24-hour background scheduler.
+2. **Web & Scheduling Service** (`ai-research-aggregator`): Docker container running the configuration and status portal on port `8000` alongside an automated 24-hour background scheduler.
 
 ### 1-Click Deployment Steps:
 1. Log into your [Render Dashboard](https://dashboard.render.com/).
 2. Click **New +** → **Blueprint**.
-3. Select this repository: `https://github.com/Dhruv-Chugh/AI-research-aggregator` (Branch: `deploy`).
+3. Select this repository: `https://github.com/Dhruv-Chugh/AI-research-aggregator` (Branch: `deployment-part-2`).
 4. Render automatically parses `render.yaml` and links the PostgreSQL database to the web service via `DATABASE_URL`.
 5. Enter your environment secrets in the Render dashboard:
+   - `RECIPIENT_EMAIL`: Recipient email address for daily IEEE intelligence briefings.
+   - `SUBSCRIBER_NAME`: Recipient display name.
+   - `SMTP_USER`: Sender Gmail address.
+   - `SMTP_PASSWORD`: Your 16-character Gmail App Password.
    - `GEMINI_API_KEY`: Your Gemini API key (from [Google AI Studio](https://aistudio.google.com/)).
    - `OPENAI_API_KEY`: *(Optional)* OpenAI fallback key.
-   - `SMTP_USER`: Your Gmail address.
-   - `SMTP_PASSWORD`: Your 16-character Gmail App Password.
-   - `RECIPIENT_EMAIL`: Recipient email address for IEEE technical briefings.
 6. Click **Apply**.
    - Render builds the image, creates database schema tables, launches the web portal, and activates the 24-hour autonomous pipeline.
-   - Access your portal anytime at: `https://ai-research-aggregator.onrender.com`.
 
 ---
 

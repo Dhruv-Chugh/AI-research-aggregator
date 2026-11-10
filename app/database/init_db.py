@@ -79,21 +79,22 @@ def seed_initial_data(engine: Engine) -> None:
 
         # 2. Seed default subscriber
         import os
-        default_email = os.getenv("RECIPIENT_EMAIL", "dhruvchugh2007@gmail.com")
-        sub_name = os.getenv("SUBSCRIBER_NAME", "Dhruv Chugh")
-        sub = repo.subscribers.get_by_email(default_email)
-        if not sub:
-            repo.subscribers.create(
-                email=default_email,
-                name=sub_name,
-                is_active=True,
-            )
-            logger.info("Added default subscriber: %s", default_email)
-        else:
-            sub.name = sub_name
-            sub.is_active = True
-            session.flush()
-            logger.info("Verified active subscriber: %s", default_email)
+        default_email = os.getenv("RECIPIENT_EMAIL", "").strip().lower()
+        sub_name = os.getenv("SUBSCRIBER_NAME", "Research Practitioner").strip()
+        if default_email:
+            sub = repo.subscribers.get_by_email(default_email)
+            if not sub:
+                repo.subscribers.create(
+                    email=default_email,
+                    name=sub_name,
+                    is_active=True,
+                )
+                logger.info("Added default subscriber: %s", default_email)
+            else:
+                sub.name = sub_name
+                sub.is_active = True
+                session.flush()
+                logger.info("Verified active subscriber: %s", default_email)
 
         session.commit()
         logger.info("✅ Database seeding completed successfully.")

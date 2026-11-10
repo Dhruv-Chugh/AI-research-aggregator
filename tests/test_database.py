@@ -236,31 +236,31 @@ def test_subscriber_repository_crud(db_session: Session):
     repo = SubscriberRepository(db_session)
 
     # 1. Create Subscriber
-    sub = repo.create(email="DhruvChugh2007@gmail.com", name="Dhruv Chugh")
+    sub = repo.create(email="Practitioner@example.com", name="Research Practitioner")
     db_session.commit()
 
     # Automatic lowercasing
-    assert sub.email == "dhruvchugh2007@gmail.com"
+    assert sub.email == "practitioner@example.com"
     assert sub.is_active is True
 
     # 2. Lookup
-    found = repo.get_by_email("dhruvchugh2007@gmail.com")
+    found = repo.get_by_email("practitioner@example.com")
     assert found is not None
-    assert found.name == "Dhruv Chugh"
+    assert found.name == "Research Practitioner"
 
     # 3. Toggle Active
-    repo.toggle_active("dhruvchugh2007@gmail.com", is_active=False)
+    repo.toggle_active("practitioner@example.com", is_active=False)
     db_session.commit()
 
     assert len(repo.get_active()) == 0
 
-    repo.toggle_active("dhruvchugh2007@gmail.com", is_active=True)
+    repo.toggle_active("practitioner@example.com", is_active=True)
     db_session.commit()
     assert len(repo.get_active()) == 1
 
     # 4. Delete
-    assert repo.delete("dhruvchugh2007@gmail.com") is True
-    assert repo.get_by_email("dhruvchugh2007@gmail.com") is None
+    assert repo.delete("practitioner@example.com") is True
+    assert repo.get_by_email("practitioner@example.com") is None
 
 
 # -------------------------------------------------------------------------
@@ -346,7 +346,8 @@ def test_news_repository_bridges(db_session: Session):
 # -------------------------------------------------------------------------
 
 
-def test_create_tables_and_seed(test_engine):
+def test_create_tables_and_seed(test_engine, monkeypatch):
+    monkeypatch.setenv("RECIPIENT_EMAIL", "test.subscriber@example.com")
     # Recreate tables and seed default data
     create_tables(target_engine=test_engine, drop_first=True, seed_defaults=True)
 
@@ -362,7 +363,7 @@ def test_create_tables_and_seed(test_engine):
         assert "Figuring Out by Raj Shamani" in names
 
         # Subscriber should be seeded
-        sub = repo.subscribers.get_by_email("dhruvchugh2007@gmail.com")
+        sub = repo.subscribers.get_by_email("test.subscriber@example.com")
         assert sub is not None
         assert sub.is_active is True
 

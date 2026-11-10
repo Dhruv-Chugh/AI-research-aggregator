@@ -47,8 +47,8 @@ def populated_rankings_db(db_session: Session) -> dict:
 
     # 1. Subscriber
     sub = repo.subscribers.create(
-        email="dhruvchugh2007@gmail.com",
-        name="Dhruv Chugh",
+        email="subscriber@example.com",
+        name="Research Practitioner",
         bio_or_role="AI Software Architect & Full-Stack Engineer",
         expertise_level="advanced",
         interests=["Autonomous Agents", "LLMs", "Reasoning"],
@@ -129,7 +129,7 @@ def test_email_agent_run_daily_delivery(db_session: Session, populated_rankings_
         assert len(report.errors) == 0
 
         res = report.results[0]
-        assert res["email"] == "dhruvchugh2007@gmail.com"
+        assert res["email"] == "subscriber@example.com"
         assert res["success"] is True
         assert os.path.exists(res["pdf_path"])
         assert os.path.exists(res["html_path"])
