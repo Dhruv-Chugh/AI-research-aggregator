@@ -144,24 +144,12 @@ class SourcesConfig(BaseModel):
 
     @classmethod
     def get_default(cls) -> SourcesConfig:
-        """Create default configuration with Think School and Raj Shamani channels."""
-        default_channels = [
-            ChannelConfig(
-                name="Think School",
-                channel_id="UCKZozRVHRYsYHGEyNKuhhdA",
-                handle="@thinkschool",
-                url="https://www.youtube.com/@thinkschool",
-                is_active=True,
-            ),
-            ChannelConfig(
-                name="Figuring Out by Raj Shamani",
-                channel_id="UCzwCEE_PchiBULMnAJqhGVg",
-                handle="@rajshamani",
-                url="https://www.youtube.com/@rajshamani",
-                is_active=True,
-            ),
-        ]
-        return cls(youtube_channels=default_channels)
+        """Create default configuration with no pre-configured YouTube channels.
+
+        Users add their own channels via the web UI or API after setup.
+        OpenAI and Anthropic RSS feeds are always enabled by default.
+        """
+        return cls(youtube_channels=[])
 
     @classmethod
     def load_from_file(cls, path: Union[str, Path] = DEFAULT_SOURCES_PATH) -> SourcesConfig:

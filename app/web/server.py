@@ -118,29 +118,7 @@ def auto_init_database() -> bool:
             create_tables(engine)
             seed_initial_data(engine)
 
-            # Purge any legacy personal subscriber records or legacy channels from DB
-            try:
-                from app.database import get_db_session
-                from app.database.models import Subscriber, Source
-                from sqlalchemy import delete
-                with get_db_session() as session:
-                    session.execute(
-                        delete(Subscriber).where(
-                            (Subscriber.email.ilike("%dhruv%")) |
-                            (Subscriber.email.ilike("%chugh%")) |
-                            (Subscriber.name.ilike("%dhruv%"))
-                        )
-                    )
-                    session.execute(
-                        delete(Source).where(
-                            Source.channel_id.in_(["UCKZozRVHRYsYHGEyNKuhhdA", "UCzwCEE_PchiBULMnAJqhGVg"])
-                        )
-                    )
-                    session.commit()
-            except Exception as clean_err:
-                logger.debug("Database cleanup notice: %s", clean_err)
-
-            logger.info("Database initialized and sanitized successfully.")
+            logger.info("Database initialized successfully.")
             return True
         else:
             logger.info("PostgreSQL not reachable at startup. Operating with local config fallback.")
@@ -433,13 +411,40 @@ async def get_full_configuration():
     sources_cfg = get_sources_config(DEFAULT_SOURCES_PATH)
     db_connected, subscriber_data, article_count, last_scraped = get_db_status_and_subscriber()
 
-    # Filter out legacy personal channels
-    active_yt = [
-        c.model_dump()
-        for c in sources_cfg.youtube_channels
-        if not any(x in (c.handle or "").lower() for x in ["thinkschool", "rajshamani"])
-        and not any(x in c.name.lower() for x in ["think school", "raj shamani"])
-    ]
+    # When DB is connected, use it as the authoritative source for YouTube channels
+    # so that channels added via the UI persist across container restarts.
+    if db_connected:
+        try:
+            from app.database import get_db_session
+            from app.database.models import Source
+            from sqlalchemy import select
+
+            with get_db_session() as session:
+                stmt = select(Source).where(
+                    Source.source_type == "youtube",
+                    Source.is_active.is_not(None),
+                )
+                db_sources = session.execute(stmt).scalars().all()
+                if db_sources:
+                    active_yt = [
+                        {
+                            "name": s.name,
+                            "channel_id": s.channel_id or "",
+                            "handle": s.handle or "",
+                            "url": s.url or "",
+                            "feed_url": s.feed_url or "",
+                            "is_active": s.is_active if s.is_active is not None else True,
+                        }
+                        for s in db_sources
+                    ]
+                else:
+                    # DB connected but no channel rows yet — fall back to file config
+                    active_yt = [c.model_dump() for c in sources_cfg.youtube_channels]
+        except Exception as db_err:
+            logger.debug("DB channel read fallback: %s", db_err)
+            active_yt = [c.model_dump() for c in sources_cfg.youtube_channels]
+    else:
+        active_yt = [c.model_dump() for c in sources_cfg.youtube_channels]
 
     return {
         "status": "success",

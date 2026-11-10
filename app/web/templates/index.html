@@ -748,7 +748,7 @@
           </button>
         </div>
         <div class="input-helper" id="addChannelHelper">
-          Supports YouTube handles (e.g. <code>@TwoMinutePapers</code>), URLs, or 24-character IDs. Metadata is automatically resolved.
+          Enter just <strong>one</strong> of: a YouTube handle (e.g. <code>@TwoMinutePapers</code>), a full channel URL, or a 24-character Channel ID &mdash; you do not need all three. The channel name and metadata are resolved automatically.
         </div>
       </div>
     </div>
@@ -1011,11 +1011,7 @@
       const container = document.getElementById("channelListContainer");
       container.innerHTML = "";
 
-      // Exclude legacy personal channels
-      const cleanList = (channels || []).filter(ch =>
-        !/thinkschool|rajshamani/i.test(ch.handle || "") &&
-        !/think school|raj shamani/i.test(ch.name || "")
-      );
+      const cleanList = channels || [];
 
       if (cleanList.length === 0) {
         container.innerHTML = `
