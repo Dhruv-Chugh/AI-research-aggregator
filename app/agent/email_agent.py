@@ -83,8 +83,12 @@ class EmailDeliveryAgent:
         b_date = batch_date or utc_now().date()
         rankings = self.repo.user_rankings.get_rankings_for_subscriber(subscriber_id, batch_date=b_date)
         if not rankings:
-            # Fallback to any recent rankings if specific date had no run
-            rankings = self.repo.user_rankings.get_rankings_for_subscriber(subscriber_id, batch_date=None, limit=50)
+            # Fallback to the latest available batch date rather than mixing batches
+            latest_date = self.repo.user_rankings.get_latest_batch_date(subscriber_id)
+            if latest_date:
+                rankings = self.repo.user_rankings.get_rankings_for_subscriber(
+                    subscriber_id, batch_date=latest_date, limit=50
+                )
         return rankings
 
     def deliver_for_subscriber(
@@ -189,6 +193,8 @@ class EmailDeliveryAgent:
                     report.emails_sent_live += 1
                 else:
                     report.exports_saved += 1
+                    if not res.success and res.error_message:
+                        report.errors.append(f"{sub.email}: {res.error_message}")
 
                 report.results.append({
                     "email": sub.email,

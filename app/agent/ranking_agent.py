@@ -367,31 +367,11 @@ class UserRankingAgent:
         # 2. Try Gemini Interactions API if OpenAI was unavailable or failed
         if not raw_text and self.llm_client.has_gemini_key:
             try:
-                client = self.llm_client.get_gemini_client()
-                try:
-                    interaction = client.interactions.create(
-                        model=self.llm_client.gemini_model,
-                        system_instruction=RANKING_SYSTEM_PROMPT,
-                        input=prompt,
-                        response_format={
-                            "type": "text",
-                            "mime_type": "application/json",
-                            "schema": schema,
-                        },
-                    )
-                    raw_text = getattr(interaction, "output_text", None)
-                except Exception:
-                    from google.genai import types
-
-                    res = client.models.generate_content(
-                        model=self.llm_client.gemini_model,
-                        contents=[RANKING_SYSTEM_PROMPT, prompt],
-                        config=types.GenerateContentConfig(
-                            response_mime_type="application/json",
-                            response_schema=PersonalizedRankingOutput,
-                        ),
-                    )
-                    raw_text = res.text
+                raw_text, _ = self.llm_client.call_gemini_structured(
+                    system_instruction=RANKING_SYSTEM_PROMPT,
+                    user_content=prompt,
+                    schema_model=PersonalizedRankingOutput,
+                )
             except Exception as e:
                 logger.warning("Gemini ranking call error: %s.", e)
 
