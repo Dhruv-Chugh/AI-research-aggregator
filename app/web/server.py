@@ -68,10 +68,34 @@ _pipeline_state: Dict[str, Any] = {
     "briefings_delivered": 0,
 }
 
+DEFAULT_PLACEHOLDER_EMAIL = "subscriber@example.com"
+DEFAULT_PLACEHOLDER_NAME = "AI Research Subscriber"
+
+
+def _should_mask_public_pii() -> bool:
+    """Return True in Render cloud deployments (or when MASK_PUBLIC_PII=true) to redact PII."""
+    explicit = os.getenv("MASK_PUBLIC_PII", "").strip().lower()
+    if explicit in ("true", "1", "yes"):
+        return True
+    if explicit in ("false", "0", "no"):
+        return False
+    return os.getenv("RENDER", "").strip().lower() in ("true", "1", "yes")
+
+
+def _mask_email(email: str) -> str:
+    """Redact local-part of an email address for public portal responses."""
+    raw = (email or "").strip()
+    if not raw or "@" not in raw:
+        return ""
+    local, domain = raw.split("@", 1)
+    prefix = local[0] if local else "*"
+    return f"{prefix}***@{domain}"
+
+
 # Default subscriber preferences
 DEFAULT_SUBSCRIBER = {
-    "email": os.getenv("RECIPIENT_EMAIL", "dhruvchugh2007@gmail.com"),
-    "name": os.getenv("SUBSCRIBER_NAME", "Dhruv Chugh"),
+    "email": os.getenv("RECIPIENT_EMAIL", DEFAULT_PLACEHOLDER_EMAIL),
+    "name": os.getenv("SUBSCRIBER_NAME", DEFAULT_PLACEHOLDER_NAME),
     "is_active": True,
     "bio_or_role": "AI Software Architect & Researcher",
     "expertise_level": "advanced",
@@ -111,13 +135,13 @@ def load_local_preferences() -> Dict[str, Any]:
     if env_email:
         merged["email"] = env_email
     elif not merged.get("email"):
-        merged["email"] = "dhruvchugh2007@gmail.com"
+        merged["email"] = DEFAULT_PLACEHOLDER_EMAIL
 
     env_name = os.getenv("SUBSCRIBER_NAME", "").strip()
     if env_name:
         merged["name"] = env_name
     elif not merged.get("name"):
-        merged["name"] = "Dhruv Chugh"
+        merged["name"] = DEFAULT_PLACEHOLDER_NAME
 
     return merged
 
@@ -285,14 +309,16 @@ def sync_subscriber_to_db(prefs: Dict[str, Any]) -> bool:
             return False
 
         with get_db_session() as session:
-            email = prefs.get("email", DEFAULT_SUBSCRIBER["email"]).strip().lower()
+            email = (prefs.get("email") or DEFAULT_SUBSCRIBER["email"]).strip().lower()
             if not email:
                 return False
             stmt = select(Subscriber).where(Subscriber.email == email)
             subscriber = session.execute(stmt).scalar_one_or_none()
+            incoming_name = (prefs.get("name") or "").strip()
 
             if subscriber:
-                subscriber.name = prefs.get("name")
+                if incoming_name and (incoming_name != DEFAULT_PLACEHOLDER_NAME or not subscriber.name):
+                    subscriber.name = incoming_name
                 subscriber.is_active = prefs.get("is_active", True)
                 subscriber.bio_or_role = prefs.get("bio_or_role")
                 subscriber.expertise_level = prefs.get("expertise_level", "advanced")
@@ -463,6 +489,11 @@ async def get_full_configuration():
     else:
         active_yt = [c.model_dump() for c in sources_cfg.youtube_channels]
 
+    response_subscriber = dict(subscriber_data)
+    if _should_mask_public_pii():
+        response_subscriber["email"] = _mask_email(str(response_subscriber.get("email", "")))
+        response_subscriber["name"] = ""
+
     return {
         "status": "success",
         "system": {
@@ -476,7 +507,7 @@ async def get_full_configuration():
             "openai": sources_cfg.openai.model_dump(),
             "anthropic": sources_cfg.anthropic.model_dump(),
         },
-        "subscriber": subscriber_data,
+        "subscriber": response_subscriber,
     }
 
 
@@ -484,14 +515,29 @@ async def get_full_configuration():
 async def save_configuration(payload: UpdatePreferencesRequest):
     """Save updated subscriber preferences and pipeline settings."""
     prefs = payload.model_dump()
+    existing = load_local_preferences()
+
+    submitted_email = (prefs.get("email") or "").strip()
+    if not submitted_email or "*" in submitted_email:
+        prefs["email"] = existing.get("email", DEFAULT_PLACEHOLDER_EMAIL)
+
+    submitted_name = (prefs.get("name") or "").strip()
+    if not submitted_name:
+        prefs["name"] = existing.get("name", DEFAULT_PLACEHOLDER_NAME)
+
     save_local_preferences(prefs)
     db_synced = sync_subscriber_to_db(prefs)
+
+    response_prefs = dict(prefs)
+    if _should_mask_public_pii():
+        response_prefs["email"] = _mask_email(str(response_prefs.get("email", "")))
+        response_prefs["name"] = ""
 
     return {
         "status": "success",
         "message": "Preferences saved successfully.",
         "db_synced": db_synced,
-        "subscriber": prefs,
+        "subscriber": response_prefs,
     }
 
 

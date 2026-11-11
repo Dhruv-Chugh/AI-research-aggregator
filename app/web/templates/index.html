@@ -961,13 +961,13 @@
       document.getElementById("channelCountLabel").textContent =
         `${sources.youtube_channels.length} Channels Tracked`;
 
-      // Subscriber inputs (strip any personal identifiers so placeholders display cleanly)
+      // Subscriber inputs (keep placeholders clean if server masks or uses sample address)
       let rawEmail = (subscriber.email || "").trim();
-      if (/dhruv|chugh|byteme/i.test(rawEmail)) rawEmail = "";
+      if (rawEmail === "subscriber@example.com" || rawEmail.includes("*")) rawEmail = "";
       document.getElementById("subEmail").value = rawEmail;
 
       let rawName = (subscriber.name || "").trim();
-      if (/dhruv/i.test(rawName)) rawName = "";
+      if (rawName === "AI Research Subscriber") rawName = "";
       document.getElementById("subName").value = rawName;
       document.getElementById("subRole").value = subscriber.bio_or_role || "";
 

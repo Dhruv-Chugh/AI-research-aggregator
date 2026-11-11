@@ -69,7 +69,7 @@ def test_pdf_generator_creates_valid_pdf(tmp_path):
     gen = PDFReportGenerator(cache_dir=str(tmp_path / "cache"))
 
     pdf_bytes = gen.generate_pdf(
-        subscriber_name="Dhruv Chugh",
+        subscriber_name="Alex Mercer",
         subscriber_role="AI Software Architect",
         expertise_level="advanced",
         interests=["autonomous agents", "reasoning"],
@@ -127,7 +127,7 @@ def test_pdf_generator_no_rank_numbers_or_thumbnails(tmp_path):
 
     radar_flowables = gen.build_radar_section([r2])
     featured_flowables = gen.build_featured_section([r1])
-    intro_flowables = gen.build_intro_page("Dhruv", "Architect", "advanced", ["AI"], "Exec summary", date(2026, 11, 8), 1, 1, "Claude 3.7")
+    intro_flowables = gen.build_intro_page("Alex", "Architect", "advanced", ["AI"], "Exec summary", date(2026, 11, 8), 1, 1, "Claude 3.7")
 
     # Serialize flowables text for assertion
     def extract_text(item):

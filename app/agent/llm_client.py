@@ -302,7 +302,6 @@ class DualLLMClient:
                     "mime_type": "application/json",
                     "schema": schema,
                 },
-                timeout=timeout_ms / 1000.0,
             )
             raw_text = getattr(interaction, "output_text", None)
             tokens_used = (
@@ -371,6 +370,7 @@ class DualLLMClient:
         candidate_models = list(dict.fromkeys([self.gemini_model, *self.gemini_fallback_models]))
         errors: List[str] = []
 
+        raise_on_all_429: Optional[Exception] = None
         for idx, model_name in enumerate(candidate_models):
             try:
                 raw_text, tokens_used = self._invoke_gemini_model(
@@ -383,14 +383,23 @@ class DualLLMClient:
                     timeout_ms=timeout_ms,
                 )
                 if idx > 0:
-                    logger.info("✅ Gemini backup model '%s' succeeded after primary overload.", model_name)
+                    logger.info("✅ Gemini backup model '%s' succeeded.", model_name)
                 self.last_gemini_model_used = model_name
                 return raw_text, tokens_used
             except Exception as err:
-                if _is_rate_limit_error(err):
-                    raise
                 errors.append(str(err))
                 has_next = idx + 1 < len(candidate_models)
+                if _is_rate_limit_error(err):
+                    raise_on_all_429 = err
+                    if has_next:
+                        logger.warning(
+                            "Gemini model '%s' hit rate limit (429); failing over to backup '%s'.",
+                            model_name,
+                            candidate_models[idx + 1],
+                        )
+                        continue
+                    raise
+                raise_on_all_429 = None
                 if has_next and _is_transient_gemini_error(err):
                     logger.warning(
                         "Gemini model '%s' hit transient overload/timeout; failing over to '%s'.",
@@ -408,6 +417,8 @@ class DualLLMClient:
                     continue
                 break
 
+        if raise_on_all_429 is not None:
+            raise raise_on_all_429
         raise RuntimeError(f"Gemini generation failed: {'; '.join(errors)}")
 
     def _call_gemini_interactions(

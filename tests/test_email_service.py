@@ -28,7 +28,7 @@ def test_render_html_body_includes_metadata_and_structure_guide():
 
     batch_date = date(2026, 11, 7)
     html = svc.render_html_body(
-        subscriber_name="Dhruv Chugh",
+        subscriber_name="Alex Mercer",
         subscriber_role="AI Architect",
         executive_summary="Empirical RL breakthroughs.",
         batch_date=batch_date,
@@ -39,7 +39,7 @@ def test_render_html_body_includes_metadata_and_structure_guide():
 
     assert "Daily AI Intelligence Briefing" in html
     assert "November 07, 2026" in html
-    assert "Dhruv Chugh" in html
+    assert "Alex Mercer" in html
     assert "AI Architect" in html
     assert "Empirical RL breakthroughs." in html
     assert "Full Visual PDF Report Attached" in html
@@ -68,7 +68,7 @@ def test_render_plain_text():
     it2 = make_mock_item("Daybreak Red", "https://openai.com", "OpenAI", 5, 70.0, "quick_bite")
 
     text = svc.render_plain_text(
-        subscriber_name="Dhruv Chugh",
+        subscriber_name="Alex Mercer",
         subscriber_role="AI Architect",
         executive_summary="Summary text.",
         batch_date=date(2026, 11, 7),
@@ -77,7 +77,7 @@ def test_render_plain_text():
     )
 
     assert "DAILY AI INTELLIGENCE BRIEFING" in text
-    assert "Dhruv Chugh" in text
+    assert "Alex Mercer" in text
     assert "Summary text." in text
     assert "Daily_AI_Briefing_2026-11-07.pdf" in text
     assert "Rank #" not in text

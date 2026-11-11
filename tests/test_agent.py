@@ -407,8 +407,42 @@ def test_gemini_503_cascades_to_backup_model(monkeypatch):
     assert ("interactions", "gemini-3-flash-preview") in attempted_models
 
 
-def test_gemini_429_fails_fast_without_cascade(monkeypatch):
-    """Verify 429 rate-limit errors fail fast without waiting or trying backup models."""
+def test_gemini_429_cascades_to_backup_without_retry_delay(monkeypatch):
+    """Verify 429 skips generate_content retry on that model and fails over immediately across backup models."""
+    from types import SimpleNamespace
+
+    client = DualLLMClient(
+        openai_api_key=None,
+        gemini_api_key="mock-gemini-key",
+        gemini_model="gemini-3.5-flash",
+        gemini_fallback_models=["gemini-3-flash-preview"],
+    )
+
+    calls = []
+
+    def fake_interactions(**kwargs):
+        calls.append(kwargs["model"])
+        if kwargs["model"] == "gemini-3.5-flash":
+            raise RuntimeError("429 RESOURCE_EXHAUSTED")
+        return SimpleNamespace(
+            output_text='{"title": "429 Backup OK", "summary": "S", "problem_statement": "P", "solution_statement": "Sol", "key_insights": []}',
+            usage=SimpleNamespace(total_tokens=77),
+        )
+
+    mock_genai = MagicMock()
+    mock_genai.interactions.create.side_effect = fake_interactions
+    monkeypatch.setattr(client, "get_gemini_client", lambda timeout_ms=30_000: mock_genai)
+
+    raw_text, tokens = client.call_gemini_structured("sys", "usr", ArticleDigestOutput)
+
+    assert "429 Backup OK" in raw_text
+    assert tokens == 77
+    assert calls == ["gemini-3.5-flash", "gemini-3-flash-preview"]
+    assert mock_genai.models.generate_content.call_count == 0
+
+
+def test_gemini_429_all_models_exhausted_fails_fast(monkeypatch):
+    """Verify 429 raises immediately with zero generate_content retries when all models are exhausted."""
     from unittest.mock import MagicMock
 
     client = DualLLMClient(
@@ -425,7 +459,7 @@ def test_gemini_429_fails_fast_without_cascade(monkeypatch):
     with pytest.raises(RuntimeError, match="Gemini rate limit"):
         client.call_gemini_structured("sys", "usr", ArticleDigestOutput)
 
-    assert mock_genai.interactions.create.call_count == 1
+    assert mock_genai.interactions.create.call_count == 2
     assert mock_genai.models.generate_content.call_count == 0
 
 
