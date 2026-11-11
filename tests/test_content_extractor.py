@@ -142,3 +142,32 @@ def test_fetch_content_exception():
     assert extracted.success is False
     assert "Connection refused" in extracted.error_message
 
+
+def test_fetch_content_403_uses_reader_fallback():
+    """Verify HTTP 403 triggers clean reader Markdown fallback when enabled."""
+    mock_client = MagicMock()
+    blocked_resp = MagicMock()
+    blocked_resp.status_code = 403
+
+    reader_resp = MagicMock()
+    reader_resp.status_code = 200
+    reader_resp.text = (
+        "Title: OpenAI Law Case Study\n\n"
+        "URL Source: https://openai.com/index/example/\n\n"
+        "Markdown Content:\n"
+        "OpenAI partners with global firms to deploy enterprise reasoning tools cleanly."
+    )
+
+    mock_client.get.side_effect = [blocked_resp, reader_resp]
+
+    extractor = ArticleContentExtractor(client=mock_client, enable_reader_fallback=True)
+    extracted = extractor.fetch_content("https://openai.com/index/example/")
+
+    assert extracted.success is True
+    assert extracted.title == "OpenAI Law Case Study"
+    assert extracted.markdown.startswith("OpenAI partners with global firms")
+    assert "Markdown Content:" not in extracted.markdown
+    assert extracted.word_count >= 10
+    assert mock_client.get.call_count == 2
+
+

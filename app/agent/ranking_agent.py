@@ -364,13 +364,14 @@ class UserRankingAgent:
             except Exception as e:
                 logger.warning("OpenAI ranking call error: %s. Falling back to Gemini...", e)
 
-        # 2. Try Gemini Interactions API if OpenAI was unavailable or failed
+        # 2. Try Gemini Interactions API if OpenAI was unavailable or failed (45s timeout for batch ranking)
         if not raw_text and self.llm_client.has_gemini_key:
             try:
                 raw_text, _ = self.llm_client.call_gemini_structured(
                     system_instruction=RANKING_SYSTEM_PROMPT,
                     user_content=prompt,
                     schema_model=PersonalizedRankingOutput,
+                    timeout_ms=45_000,
                 )
             except Exception as e:
                 logger.warning("Gemini ranking call error: %s.", e)

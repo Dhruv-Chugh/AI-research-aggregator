@@ -364,3 +364,68 @@ def test_digest_agent_process_all_sources(db_session: Session, sample_sources, m
     assert "### Solution & Breakthrough" in md
     assert "### Key Insights & Actionable Takeaways" in md
 
+
+def test_gemini_503_cascades_to_backup_model(monkeypatch):
+    """Verify transient 503 overload on primary model automatically fails over to backup model."""
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock
+
+    client = DualLLMClient(
+        openai_api_key=None,
+        gemini_api_key="mock-gemini-key",
+        gemini_model="gemini-3.5-flash",
+        gemini_fallback_models=["gemini-3-flash-preview", "gemini-3.5-flash-lite"],
+    )
+
+    attempted_models = []
+
+    def fake_interactions_create(**kwargs):
+        attempted_models.append(("interactions", kwargs["model"]))
+        if kwargs["model"] == "gemini-3.5-flash":
+            raise RuntimeError("503 UNAVAILABLE")
+        return SimpleNamespace(
+            output_text='{"title": "Backup OK", "summary": "S", "problem_statement": "P", "solution_statement": "Sol", "key_insights": []}',
+            usage=SimpleNamespace(total_tokens=123),
+        )
+
+    def fake_generate_content(**kwargs):
+        attempted_models.append(("generate_content", kwargs["model"]))
+        raise RuntimeError("503 UNAVAILABLE")
+
+    mock_genai = MagicMock()
+    mock_genai.interactions.create.side_effect = fake_interactions_create
+    mock_genai.models.generate_content.side_effect = fake_generate_content
+    monkeypatch.setattr(client, "get_gemini_client", lambda timeout_ms=30_000: mock_genai)
+
+    raw_text, tokens = client.call_gemini_structured("sys", "usr", ArticleDigestOutput, timeout_ms=45_000)
+
+    assert "Backup OK" in raw_text
+    assert tokens == 123
+    assert client.last_gemini_model_used == "gemini-3-flash-preview"
+    assert ("interactions", "gemini-3.5-flash") in attempted_models
+    assert ("generate_content", "gemini-3.5-flash") in attempted_models
+    assert ("interactions", "gemini-3-flash-preview") in attempted_models
+
+
+def test_gemini_429_fails_fast_without_cascade(monkeypatch):
+    """Verify 429 rate-limit errors fail fast without waiting or trying backup models."""
+    from unittest.mock import MagicMock
+
+    client = DualLLMClient(
+        openai_api_key=None,
+        gemini_api_key="mock-gemini-key",
+        gemini_model="gemini-3.5-flash",
+        gemini_fallback_models=["gemini-3-flash-preview"],
+    )
+
+    mock_genai = MagicMock()
+    mock_genai.interactions.create.side_effect = RuntimeError("429 RESOURCE_EXHAUSTED")
+    monkeypatch.setattr(client, "get_gemini_client", lambda timeout_ms=30_000: mock_genai)
+
+    with pytest.raises(RuntimeError, match="Gemini rate limit"):
+        client.call_gemini_structured("sys", "usr", ArticleDigestOutput)
+
+    assert mock_genai.interactions.create.call_count == 1
+    assert mock_genai.models.generate_content.call_count == 0
+
+

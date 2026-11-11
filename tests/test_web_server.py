@@ -50,6 +50,17 @@ def test_serve_form_ui():
     _run_async(_test())
 
 
+def test_root_head_method_allowed():
+    """Verify HEAD / returns 200 OK instead of 405 for cloud health probes."""
+    async def _test():
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.head("/")
+            assert response.status_code == 200
+
+    _run_async(_test())
+
+
 def test_get_configuration():
     """Verify GET /api/config returns complete sources and subscriber profile."""
     async def _test():

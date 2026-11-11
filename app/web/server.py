@@ -409,7 +409,7 @@ async def healthcheck():
     return {"status": "ok", "service": "axiom-dispatch"}
 
 
-@app.get("/", response_class=HTMLResponse)
+@app.api_route("/", methods=["GET", "HEAD"], response_class=HTMLResponse)
 async def serve_form_ui():
     """Serve the single-page Google/Microsoft Forms styled interface."""
     if not INDEX_HTML_PATH.exists():

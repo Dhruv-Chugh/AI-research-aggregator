@@ -20,6 +20,26 @@ from app.agent.schemas import ArticleDigestOutput
 
 logger = logging.getLogger("ai_news.agent.llm_client")
 
+DEFAULT_GEMINI_FALLBACK_MODELS: List[str] = [
+    "gemini-3-flash-preview",
+    "gemini-3.5-flash-lite",
+]
+
+
+def _is_rate_limit_error(err: Exception) -> bool:
+    """Return True for quota/rate-limit (429) or non-retryable missing model (404) errors."""
+    upper = str(err).upper()
+    return any(tok in upper for tok in ("429", "RESOURCE_EXHAUSTED", "TOO MANY REQUESTS"))
+
+
+def _is_transient_gemini_error(err: Exception) -> bool:
+    """Return True for transient overload/timeout errors (503, 504, deadline exceeded)."""
+    upper = str(err).upper()
+    return any(
+        tok in upper
+        for tok in ("503", "504", "UNAVAILABLE", "DEADLINE_EXCEEDED", "TIMED OUT", "TIMEOUT", "NOT_FOUND", "404")
+    )
+
 SYSTEM_PROMPT = """You are an expert AI research analyst and technology journalist.
 Your objective is to analyze technical articles, research breakthroughs, and podcast discussions/transcripts from leading AI organizations and thought leaders (YouTube, OpenAI, Anthropic).
 
@@ -67,6 +87,7 @@ class DualLLMClient:
         gemini_api_key: Optional[str] = None,
         openai_model: Optional[str] = None,
         gemini_model: Optional[str] = None,
+        gemini_fallback_models: Optional[List[str]] = None,
         openai_token_threshold: int = 12_000,
         preferred_provider: str = "gemini",
         allow_offline_fallback: bool = True,
@@ -76,6 +97,16 @@ class DualLLMClient:
 
         self.openai_model = openai_model or os.getenv("OPENAI_MODEL", "gpt-4o-mini")
         self.gemini_model = gemini_model or os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
+        if gemini_fallback_models is not None:
+            self.gemini_fallback_models = [m.strip() for m in gemini_fallback_models if m.strip()]
+        else:
+            env_fallbacks = os.getenv("GEMINI_FALLBACK_MODELS", "")
+            self.gemini_fallback_models = (
+                [m.strip() for m in env_fallbacks.split(",") if m.strip()]
+                if env_fallbacks.strip()
+                else list(DEFAULT_GEMINI_FALLBACK_MODELS)
+            )
+        self.last_gemini_model_used: Optional[str] = None
 
         self.openai_token_threshold = openai_token_threshold
         self.preferred_provider = preferred_provider.lower().strip()
@@ -104,17 +135,17 @@ class DualLLMClient:
             self._openai_client = OpenAI(api_key=self.openai_api_key)
         return self._openai_client
 
-    def get_gemini_client(self) -> Any:
-        """Lazily initialize and return Google GenAI SDK client with a 15-second timeout."""
+    def get_gemini_client(self, timeout_ms: int = 30_000) -> Any:
+        """Lazily initialize and return Google GenAI SDK client with fast-fail retries."""
         if self._gemini_client is None:
             if not self.has_gemini_key:
                 raise ValueError("GEMINI_API_KEY is not set.")
             from google import genai
             from google.genai import types
 
-            # Set 15s timeout and single attempt to prevent SDK 429 exponential backoff hangs
+            # Single attempt to prevent SDK 429 exponential backoff hangs; 30s default timeout
             http_opts = types.HttpOptions(
-                timeout=15_000,
+                timeout=timeout_ms,
                 retry_options=types.HttpRetryOptions(attempts=1),
             )
             self._gemini_client = genai.Client(api_key=self.gemini_api_key, http_options=http_opts)
@@ -249,20 +280,21 @@ class DualLLMClient:
         model_name = getattr(response, "model", self.openai_model)
         return output, f"openai:responses/{model_name}", tokens_used
 
-    def call_gemini_structured(
+    def _invoke_gemini_model(
         self,
+        client: Any,
+        model_name: str,
         system_instruction: str,
         user_content: str,
+        schema: Dict[str, Any],
         schema_model: Any,
+        timeout_ms: int,
     ) -> Tuple[str, Optional[int]]:
-        """Invoke Gemini Interactions API with generate_content fallback and fast-fail on 429."""
-        client = self.get_gemini_client()
-        schema = schema_model.model_json_schema()
-
+        """Invoke Interactions API then generate_content fallback for a single Gemini model."""
         # 1. Try Gemini Interactions API first
         try:
             interaction = client.interactions.create(
-                model=self.gemini_model,
+                model=model_name,
                 system_instruction=system_instruction,
                 input=user_content,
                 response_format={
@@ -270,6 +302,7 @@ class DualLLMClient:
                     "mime_type": "application/json",
                     "schema": schema,
                 },
+                timeout=timeout_ms / 1000.0,
             )
             raw_text = getattr(interaction, "output_text", None)
             tokens_used = (
@@ -278,28 +311,36 @@ class DualLLMClient:
                 else None
             )
             if not raw_text:
-                raise ValueError("Gemini Interactions API returned empty text output.")
+                raise ValueError(f"Gemini Interactions API ({model_name}) returned empty text output.")
             return raw_text, tokens_used
         except Exception as inter_err:
-            inter_str = str(inter_err).upper()
-            if "429" in inter_str or "RESOURCE_EXHAUSTED" in inter_str or "TOO MANY REQUESTS" in inter_str:
+            if _is_rate_limit_error(inter_err):
                 logger.warning(
-                    "Gemini rate limit (429) on interactions.create: %s. Skipping retry to avoid backoff delays.",
+                    "Gemini rate limit (429) on interactions.create (%s): %s. Skipping retry to avoid backoff delays.",
+                    model_name,
                     inter_err,
                 )
                 raise RuntimeError(f"Gemini rate limit: {inter_err}") from inter_err
 
-            logger.debug("Interactions API direct invocation note: %s. Trying generate_content fallback.", inter_err)
-            # 2. Fallback to client.models.generate_content for maximum SDK compatibility
+            logger.debug(
+                "Interactions API note (%s): %s. Trying generate_content fallback.",
+                model_name,
+                inter_err,
+            )
+            # 2. Fallback to client.models.generate_content for the same model
             try:
                 from google.genai import types
 
                 response = client.models.generate_content(
-                    model=self.gemini_model,
+                    model=model_name,
                     contents=[system_instruction, user_content],
                     config=types.GenerateContentConfig(
                         response_mime_type="application/json",
                         response_schema=schema_model,
+                        http_options=types.HttpOptions(
+                            timeout=timeout_ms,
+                            retry_options=types.HttpRetryOptions(attempts=1),
+                        ),
                     ),
                 )
                 raw_text = response.text
@@ -309,11 +350,65 @@ class DualLLMClient:
                     else None
                 )
                 if not raw_text:
-                    raise ValueError("Gemini generate_content returned empty text output.")
+                    raise ValueError(f"Gemini generate_content ({model_name}) returned empty text output.")
                 return raw_text, tokens_used
             except Exception as gen_err:
-                logger.warning("Gemini generate_content also failed: %s", gen_err)
-                raise RuntimeError(f"Gemini generation failed: {inter_err}; {gen_err}") from gen_err
+                if _is_rate_limit_error(gen_err):
+                    raise RuntimeError(f"Gemini rate limit: {gen_err}") from gen_err
+                logger.warning("Gemini generate_content failed for %s: %s", model_name, gen_err)
+                raise RuntimeError(f"{model_name}: {inter_err}; {gen_err}") from gen_err
+
+    def call_gemini_structured(
+        self,
+        system_instruction: str,
+        user_content: str,
+        schema_model: Any,
+        timeout_ms: int = 30_000,
+    ) -> Tuple[str, Optional[int]]:
+        """Invoke Gemini with per-call timeout, fast-fail on 429, and model fallback on 503/504."""
+        client = self.get_gemini_client(timeout_ms=timeout_ms)
+        schema = schema_model.model_json_schema()
+        candidate_models = list(dict.fromkeys([self.gemini_model, *self.gemini_fallback_models]))
+        errors: List[str] = []
+
+        for idx, model_name in enumerate(candidate_models):
+            try:
+                raw_text, tokens_used = self._invoke_gemini_model(
+                    client=client,
+                    model_name=model_name,
+                    system_instruction=system_instruction,
+                    user_content=user_content,
+                    schema=schema,
+                    schema_model=schema_model,
+                    timeout_ms=timeout_ms,
+                )
+                if idx > 0:
+                    logger.info("✅ Gemini backup model '%s' succeeded after primary overload.", model_name)
+                self.last_gemini_model_used = model_name
+                return raw_text, tokens_used
+            except Exception as err:
+                if _is_rate_limit_error(err):
+                    raise
+                errors.append(str(err))
+                has_next = idx + 1 < len(candidate_models)
+                if has_next and _is_transient_gemini_error(err):
+                    logger.warning(
+                        "Gemini model '%s' hit transient overload/timeout; failing over to '%s'.",
+                        model_name,
+                        candidate_models[idx + 1],
+                    )
+                    continue
+                if has_next:
+                    logger.warning(
+                        "Gemini model '%s' failed (%s); trying backup '%s'.",
+                        model_name,
+                        err,
+                        candidate_models[idx + 1],
+                    )
+                    continue
+                break
+
+        raise RuntimeError(f"Gemini generation failed: {'; '.join(errors)}")
 
     def _call_gemini_interactions(
         self,
@@ -333,13 +428,15 @@ class DualLLMClient:
             system_instruction=SYSTEM_PROMPT,
             user_content=user_content,
             schema_model=ArticleDigestOutput,
+            timeout_ms=30_000,
         )
 
         cleaned = clean_json_text(raw_output_text)
         data = json.loads(cleaned)
         output = ArticleDigestOutput.model_validate(data)
+        used_model = self.last_gemini_model_used or self.gemini_model
 
-        return output, f"gemini:interactions/{self.gemini_model}", tokens_used
+        return output, f"gemini:interactions/{used_model}", tokens_used
 
     def _generate_offline_digest(
         self,
