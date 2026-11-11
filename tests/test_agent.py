@@ -196,8 +196,10 @@ def test_dual_llm_client_fallback_gemini_to_openai():
         assert "openai" in model
 
 
-def test_dual_llm_client_offline_fallback():
+def test_dual_llm_client_offline_fallback(monkeypatch):
     """Verify intelligent deterministic fallback when no API keys are present."""
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     client = DualLLMClient(
         openai_api_key=None,
         gemini_api_key=None,
@@ -291,8 +293,10 @@ def test_article_digest_repository_crud(db_session: Session, sample_sources):
 # =========================================================================
 
 
-def test_digest_agent_process_all_sources(db_session: Session, sample_sources):
+def test_digest_agent_process_all_sources(db_session: Session, sample_sources, monkeypatch):
     """Test DigestAgent processing articles from YouTube, OpenAI, and Anthropic."""
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     repo = NewsRepository(session=db_session)
 
     # Ingest 1 article from each of the 3 sources

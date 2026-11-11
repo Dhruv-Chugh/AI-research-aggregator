@@ -58,3 +58,9 @@ services:
         sync: false
       - key: OPENAI_API_KEY
         sync: false
+      - key: GEMINI_MODEL
+        value: gemini-3.5-flash
+      - key: RESEND_FROM_EMAIL
+        value: "The AI Dispatch <onboarding@resend.dev>"
+      - key: RESEND_API_KEY
+        sync: false

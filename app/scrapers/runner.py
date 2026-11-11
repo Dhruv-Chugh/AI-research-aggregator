@@ -356,10 +356,14 @@ class AggregationRunner:
                 logger.info("Executing Visual PDF & Email Briefing delivery agent...")
                 with EmailDeliveryAgent() as email_agent:
                     deliv_rep = email_agent.run_daily_delivery(send_live=send_live_email)
-                    briefings_delivered = deliv_rep.briefings_generated
+                    briefings_delivered = deliv_rep.emails_sent_live if send_live_email else deliv_rep.briefings_generated
                     if deliv_rep.results:
                         pdf_path = deliv_rep.results[0].get("pdf_path")
-                    logger.info("Delivered/exported %d visual PDF intelligence briefings.", deliv_rep.briefings_generated)
+                    if send_live_email and deliv_rep.emails_sent_live == 0 and deliv_rep.errors:
+                        logger.error("Live email dispatch failed: %s", deliv_rep.errors)
+                        warnings.extend(deliv_rep.errors)
+                    else:
+                        logger.info("Delivered/exported %d visual PDF intelligence briefings.", briefings_delivered)
             except Exception as e:
                 msg = f"Email Delivery Agent warning: {e}"
                 logger.warning(msg)

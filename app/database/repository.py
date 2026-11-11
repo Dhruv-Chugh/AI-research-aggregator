@@ -715,6 +715,16 @@ class UserDigestRankingRepository(BaseRepository):
         stmt = stmt.limit(limit)
         return list(self.session.execute(stmt).scalars().all())
 
+    def get_latest_batch_date(self, subscriber_id: int) -> Optional[date]:
+        """Return the most recent batch_date available for a subscriber."""
+        stmt = (
+            select(UserDigestRanking.batch_date)
+            .where(UserDigestRanking.subscriber_id == subscriber_id)
+            .order_by(UserDigestRanking.batch_date.desc())
+            .limit(1)
+        )
+        return self.session.execute(stmt).scalar_one_or_none()
+
     def clear_subscriber_batch(self, subscriber_id: int, batch_date: date) -> int:
         """Clear existing rankings for a subscriber on a specific date before re-ranking."""
         stmt = select(UserDigestRanking).where(

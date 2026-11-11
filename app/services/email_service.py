@@ -49,6 +49,8 @@ class EmailService:
         smtp_password: Optional[str] = None,
         sender_name: str = "The AI Dispatch",
         sender_email: Optional[str] = None,
+        resend_api_key: Optional[str] = None,
+        resend_from_email: Optional[str] = None,
     ) -> None:
         self.smtp_host = smtp_host or os.getenv("SMTP_HOST", "smtp.gmail.com")
         self.smtp_port = int(smtp_port or os.getenv("SMTP_PORT", "587"))
@@ -56,11 +58,65 @@ class EmailService:
         self.smtp_password = smtp_password or os.getenv("SMTP_PASSWORD", "")
         self.sender_name = sender_name
         self.sender_email = sender_email or self.smtp_user or "ai-news@digest.internal"
+        self.resend_api_key = (
+            resend_api_key if resend_api_key is not None else os.getenv("RESEND_API_KEY", "")
+        ).strip()
+        default_resend_from = f"{sender_name} <onboarding@resend.dev>"
+        self.resend_from_email = (
+            resend_from_email
+            if resend_from_email is not None
+            else os.getenv("RESEND_FROM_EMAIL", default_resend_from)
+        ).strip() or default_resend_from
+
+    @property
+    def has_resend(self) -> bool:
+        """Check if a Resend HTTP API key is configured."""
+        return len(self.resend_api_key) > 3
+
+    @property
+    def has_smtp_credentials(self) -> bool:
+        """Check if live SMTP credentials are configured."""
+        return bool(self.smtp_user and self.smtp_password and len(self.smtp_password.strip()) > 3)
 
     @property
     def has_credentials(self) -> bool:
-        """Check if live SMTP credentials are configured."""
-        return bool(self.smtp_user and self.smtp_password and len(self.smtp_password.strip()) > 3)
+        """Check if any live email transport (Resend HTTP API or SMTP) is configured."""
+        return self.has_resend or self.has_smtp_credentials
+
+    def _send_via_resend(
+        self,
+        recipient_email: str,
+        subject: str,
+        html_body: str,
+        plain_text: str,
+        pdf_filename: str,
+        pdf_bytes: bytes,
+    ) -> str:
+        """Deliver briefing email over HTTPS via the Resend SDK.
+
+        Returns the Resend email ID on success.
+        """
+        import resend
+
+        resend.api_key = self.resend_api_key
+        params: resend.Emails.SendParams = {
+            "from": self.resend_from_email,
+            "to": [recipient_email],
+            "subject": subject,
+            "html": html_body,
+            "text": plain_text,
+            "attachments": [
+                {
+                    "filename": pdf_filename,
+                    "content": list(pdf_bytes),
+                    "content_type": "application/pdf",
+                }
+            ],
+        }
+        response = resend.Emails.send(params)
+        if isinstance(response, dict):
+            return str(response.get("id", "unknown"))
+        return str(getattr(response, "id", "unknown"))
 
     def render_html_body(
         self,
@@ -377,8 +433,55 @@ class EmailService:
         with open(html_export_path, "w", encoding="utf-8") as f:
             f.write(html_body)
 
-        # Live SMTP delivery if requested and configured
-        if send_live and self.has_credentials:
+        # Primary live delivery: Resend HTTPS API (bypasses cloud hosts blocking SMTP ports)
+        if send_live and self.has_resend:
+            try:
+                logger.info(
+                    "Sending briefing via Resend HTTP API from %s to %s...",
+                    self.resend_from_email,
+                    recipient_email,
+                )
+                email_id = self._send_via_resend(
+                    recipient_email=recipient_email,
+                    subject=subject,
+                    html_body=html_body,
+                    plain_text=plain_text,
+                    pdf_filename=pdf_filename,
+                    pdf_bytes=pdf_bytes,
+                )
+                logger.info(
+                    "✅ Live email successfully sent via Resend (id=%s) to: %s with attachment %s",
+                    email_id,
+                    recipient_email,
+                    pdf_filename,
+                )
+                return EmailSendResult(
+                    success=True,
+                    recipient=recipient_email,
+                    subject=subject,
+                    pdf_filename=pdf_filename,
+                    pdf_bytes_count=len(pdf_bytes),
+                    sent_live=True,
+                    html_export_path=html_export_path,
+                    pdf_export_path=pdf_export_path,
+                )
+            except Exception as e:
+                err_msg = f"Resend API error sending to {recipient_email}: {e}"
+                logger.error("❌ %s", err_msg)
+                return EmailSendResult(
+                    success=False,
+                    recipient=recipient_email,
+                    subject=subject,
+                    pdf_filename=pdf_filename,
+                    pdf_bytes_count=len(pdf_bytes),
+                    sent_live=False,
+                    html_export_path=html_export_path,
+                    pdf_export_path=pdf_export_path,
+                    error_message=err_msg,
+                )
+
+        # Fallback live SMTP delivery when Resend API key is not configured
+        if send_live and self.has_smtp_credentials:
             try:
                 # Strip spaces if user pasted 16-character app password formatted as 'xxxx xxxx xxxx xxxx'
                 clean_password = self.smtp_password.replace(" ", "")

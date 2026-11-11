@@ -75,7 +75,7 @@ class DualLLMClient:
         self.gemini_api_key = gemini_api_key or os.getenv("GEMINI_API_KEY")
 
         self.openai_model = openai_model or os.getenv("OPENAI_MODEL", "gpt-4o-mini")
-        self.gemini_model = gemini_model or os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+        self.gemini_model = gemini_model or os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
 
         self.openai_token_threshold = openai_token_threshold
         self.preferred_provider = preferred_provider.lower().strip()
@@ -112,9 +112,17 @@ class DualLLMClient:
             from google import genai
             from google.genai import types
 
-            # Set a 15-second request timeout to prevent SDK retry loops from stalling execution
-            http_opts = types.HttpOptions(timeout=15_000)
+            # Set 15s timeout and single attempt to prevent SDK 429 exponential backoff hangs
+            http_opts = types.HttpOptions(
+                timeout=15_000,
+                retry_options=types.HttpRetryOptions(attempts=1),
+            )
             self._gemini_client = genai.Client(api_key=self.gemini_api_key, http_options=http_opts)
+            # Interactions sub-client uses Speakeasy RetryConfig instead of http_options.retry_options
+            if hasattr(self._gemini_client, "interactions") and hasattr(
+                self._gemini_client.interactions, "sdk_configuration"
+            ):
+                self._gemini_client.interactions.sdk_configuration.retry_config = None
         return self._gemini_client
 
     def generate_digest(
@@ -241,15 +249,78 @@ class DualLLMClient:
         model_name = getattr(response, "model", self.openai_model)
         return output, f"openai:responses/{model_name}", tokens_used
 
+    def call_gemini_structured(
+        self,
+        system_instruction: str,
+        user_content: str,
+        schema_model: Any,
+    ) -> Tuple[str, Optional[int]]:
+        """Invoke Gemini Interactions API with generate_content fallback and fast-fail on 429."""
+        client = self.get_gemini_client()
+        schema = schema_model.model_json_schema()
+
+        # 1. Try Gemini Interactions API first
+        try:
+            interaction = client.interactions.create(
+                model=self.gemini_model,
+                system_instruction=system_instruction,
+                input=user_content,
+                response_format={
+                    "type": "text",
+                    "mime_type": "application/json",
+                    "schema": schema,
+                },
+            )
+            raw_text = getattr(interaction, "output_text", None)
+            tokens_used = (
+                getattr(interaction.usage, "total_tokens", None)
+                if hasattr(interaction, "usage") and interaction.usage
+                else None
+            )
+            if not raw_text:
+                raise ValueError("Gemini Interactions API returned empty text output.")
+            return raw_text, tokens_used
+        except Exception as inter_err:
+            inter_str = str(inter_err).upper()
+            if "429" in inter_str or "RESOURCE_EXHAUSTED" in inter_str or "TOO MANY REQUESTS" in inter_str:
+                logger.warning(
+                    "Gemini rate limit (429) on interactions.create: %s. Skipping retry to avoid backoff delays.",
+                    inter_err,
+                )
+                raise RuntimeError(f"Gemini rate limit: {inter_err}") from inter_err
+
+            logger.debug("Interactions API direct invocation note: %s. Trying generate_content fallback.", inter_err)
+            # 2. Fallback to client.models.generate_content for maximum SDK compatibility
+            try:
+                from google.genai import types
+
+                response = client.models.generate_content(
+                    model=self.gemini_model,
+                    contents=[system_instruction, user_content],
+                    config=types.GenerateContentConfig(
+                        response_mime_type="application/json",
+                        response_schema=schema_model,
+                    ),
+                )
+                raw_text = response.text
+                tokens_used = (
+                    getattr(response.usage_metadata, "total_token_count", None)
+                    if hasattr(response, "usage_metadata") and response.usage_metadata
+                    else None
+                )
+                if not raw_text:
+                    raise ValueError("Gemini generate_content returned empty text output.")
+                return raw_text, tokens_used
+            except Exception as gen_err:
+                logger.warning("Gemini generate_content also failed: %s", gen_err)
+                raise RuntimeError(f"Gemini generation failed: {inter_err}; {gen_err}") from gen_err
+
     def _call_gemini_interactions(
         self,
         article_text: str,
         meta: Dict[str, Any],
     ) -> Tuple[ArticleDigestOutput, str, Optional[int]]:
         """Call Gemini Interactions API with structured text schema and continuation support."""
-        client = self.get_gemini_client()
-        schema = ArticleDigestOutput.model_json_schema()
-
         user_content = (
             f"Please synthesize the following article into a half-page, knowledge-rich digest.\n\n"
             f"Title: {meta.get('title', 'Unknown')}\n"
@@ -258,47 +329,11 @@ class DualLLMClient:
             f"--- CONTENT ---\n{article_text}"
         )
 
-        raw_output_text: Optional[str] = None
-        tokens_used: Optional[int] = None
-
-        # 1. Try Gemini Interactions API first
-        try:
-            interaction = client.interactions.create(
-                model=self.gemini_model,
-                system_instruction=SYSTEM_PROMPT,
-                input=user_content,
-                response_format={
-                    "type": "text",
-                    "mime_type": "application/json",
-                    "schema": schema,
-                },
-            )
-            raw_output_text = getattr(interaction, "output_text", None)
-            if hasattr(interaction, "usage") and interaction.usage:
-                tokens_used = getattr(interaction.usage, "total_tokens", None)
-        except Exception as inter_err:
-            logger.debug("Interactions API direct invocation note: %s. Trying generate_content fallback.", inter_err)
-            # 2. Fallback to client.models.generate_content for maximum SDK compatibility
-            try:
-                from google.genai import types
-
-                response = client.models.generate_content(
-                    model=self.gemini_model,
-                    contents=[SYSTEM_PROMPT, user_content],
-                    config=types.GenerateContentConfig(
-                        response_mime_type="application/json",
-                        response_schema=ArticleDigestOutput,
-                    ),
-                )
-                raw_output_text = response.text
-                if hasattr(response, "usage_metadata") and response.usage_metadata:
-                    tokens_used = getattr(response.usage_metadata, "total_token_count", None)
-            except Exception as gen_err:
-                logger.warning("Gemini generate_content also failed: %s", gen_err)
-                raise RuntimeError(f"Gemini generation failed: {inter_err}; {gen_err}")
-
-        if not raw_output_text:
-            raise ValueError("Gemini API returned empty text output.")
+        raw_output_text, tokens_used = self.call_gemini_structured(
+            system_instruction=SYSTEM_PROMPT,
+            user_content=user_content,
+            schema_model=ArticleDigestOutput,
+        )
 
         cleaned = clean_json_text(raw_output_text)
         data = json.loads(cleaned)

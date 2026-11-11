@@ -9,6 +9,7 @@ authors = [
 requires-python = ">=3.12"
 dependencies = [
     "apscheduler>=3.11.3",
+    "resend>=2.0.0",
     "beautifulsoup4>=4.15.0",
     "click>=8.5.0",
     "fastapi>=0.162.2",

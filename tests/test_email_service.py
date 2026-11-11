@@ -117,3 +117,161 @@ def test_dispatch_safe_local_export(tmp_path):
     assert os.path.exists(res.html_export_path)
     assert os.path.getsize(res.pdf_export_path) == len(fake_pdf)
 
+
+def test_dispatch_via_resend_success(tmp_path, monkeypatch):
+    """Verify Resend HTTP API primary delivery sends HTML, plain text, and PDF bytes."""
+    import resend
+
+    sent_payloads = []
+
+    def fake_send(params):
+        sent_payloads.append(params)
+        return {"id": "re_mock_email_123"}
+
+    monkeypatch.setattr(resend.Emails, "send", fake_send)
+
+    svc = EmailService(
+        resend_api_key="re_mock_test_key",
+        resend_from_email="The AI Dispatch <onboarding@resend.dev>",
+    )
+    it1 = make_mock_item("Claude 3.7", "https://anthropic.com", "Anthropic", 1, 95.0, "featured")
+    fake_pdf = b"%PDF-1.4 mock content %%EOF"
+
+    res = svc.dispatch(
+        recipient_email="test@example.com",
+        subscriber_name="Alex Test",
+        subscriber_role="ML Engineer",
+        executive_summary="Summary text.",
+        batch_date=date(2026, 11, 7),
+        radar_items=[],
+        featured_items=[it1],
+        pdf_bytes=fake_pdf,
+        top_title="Claude 3.7",
+        send_live=True,
+        export_dir=str(tmp_path / "briefings"),
+    )
+
+    assert res.success is True
+    assert res.sent_live is True
+    assert res.error_message is None
+    assert len(sent_payloads) == 1
+    payload = sent_payloads[0]
+    assert payload["from"] == "The AI Dispatch <onboarding@resend.dev>"
+    assert payload["to"] == ["test@example.com"]
+    assert payload["attachments"][0]["filename"] == "Daily_AI_Briefing_2026-11-07.pdf"
+    assert payload["attachments"][0]["content"] == list(fake_pdf)
+    assert payload["attachments"][0]["content_type"] == "application/pdf"
+
+
+def test_dispatch_via_resend_failure_propagates_error(tmp_path, monkeypatch):
+    """Verify Resend errors propagate cleanly without falling back to blocked SMTP."""
+    import resend
+    import smtplib
+
+    def failing_send(_params):
+        raise RuntimeError("403 invalid API key")
+
+    smtp_called = False
+
+    def fake_smtp(*_args, **_kwargs):
+        nonlocal smtp_called
+        smtp_called = True
+        raise AssertionError("SMTP fallback should not be attempted when Resend is configured")
+
+    monkeypatch.setattr(resend.Emails, "send", failing_send)
+    monkeypatch.setattr(smtplib, "SMTP", fake_smtp)
+
+    svc = EmailService(
+        resend_api_key="re_mock_test_key",
+        smtp_user="user@gmail.com",
+        smtp_password="app_password",
+    )
+    it1 = make_mock_item("Claude 3.7", "https://anthropic.com", "Anthropic", 1, 95.0, "featured")
+
+    res = svc.dispatch(
+        recipient_email="test@example.com",
+        subscriber_name="Alex Test",
+        subscriber_role="ML Engineer",
+        executive_summary="Summary text.",
+        batch_date=date(2026, 11, 7),
+        radar_items=[],
+        featured_items=[it1],
+        pdf_bytes=b"%PDF-1.4 mock %%EOF",
+        top_title="Claude 3.7",
+        send_live=True,
+        export_dir=str(tmp_path / "briefings"),
+    )
+
+    assert res.success is False
+    assert res.sent_live is False
+    assert "Resend API error" in (res.error_message or "")
+    assert smtp_called is False
+
+
+def test_dispatch_falls_back_to_smtp_when_resend_absent(tmp_path, monkeypatch):
+    """Verify SMTP fallback remains active when RESEND_API_KEY is not configured."""
+    import smtplib
+
+    class FakeSMTP:
+        def __init__(self, host, port, timeout=None):
+            self.host = host
+            self.port = port
+            self.sent = False
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def ehlo(self):
+            pass
+
+        def starttls(self):
+            pass
+
+        def login(self, _user, _password):
+            pass
+
+        def send_message(self, _msg):
+            self.sent = True
+
+        def quit(self):
+            pass
+
+    fake_instances = []
+
+    def smtp_factory(host, port, timeout=None):
+        inst = FakeSMTP(host, port, timeout=timeout)
+        fake_instances.append(inst)
+        return inst
+
+    monkeypatch.setattr(smtplib, "SMTP", smtp_factory)
+
+    svc = EmailService(
+        resend_api_key="",
+        smtp_user="user@gmail.com",
+        smtp_password="app_password",
+    )
+    it1 = make_mock_item("Claude 3.7", "https://anthropic.com", "Anthropic", 1, 95.0, "featured")
+
+    res = svc.dispatch(
+        recipient_email="test@example.com",
+        subscriber_name="Alex Test",
+        subscriber_role="ML Engineer",
+        executive_summary="Summary text.",
+        batch_date=date(2026, 11, 7),
+        radar_items=[],
+        featured_items=[it1],
+        pdf_bytes=b"%PDF-1.4 mock %%EOF",
+        top_title="Claude 3.7",
+        send_live=True,
+        export_dir=str(tmp_path / "briefings"),
+    )
+
+    assert res.success is True
+    assert res.sent_live is True
+    assert len(fake_instances) == 1
+    assert fake_instances[0].sent is True
+
+
