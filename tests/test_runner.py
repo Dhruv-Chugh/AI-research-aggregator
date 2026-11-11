@@ -293,3 +293,31 @@ def test_run_news_aggregation_streamlined_function(sample_aggregation_data):
         assert res.total_items == 3
         assert res.db_synced is True
         mock_run.assert_called_once()
+
+
+def test_aggregation_runner_expands_empty_short_window(sample_aggregation_data):
+    """Verify expand_if_empty=True widens 24h to 168h when initial scrape finds 0 items."""
+    vids, oai, ant = sample_aggregation_data
+
+    with patch("app.scrapers.runner.YouTubeService") as mock_yt_cls, \
+         patch("app.scrapers.runner.OpenAIScraperService") as mock_oai_cls, \
+         patch("app.scrapers.runner.AnthropicScraperService") as mock_ant_cls:
+
+        mock_yt_inst = MagicMock()
+        mock_yt_inst.get_recent_videos.side_effect = [[], vids]
+        mock_yt_cls.return_value.__enter__.return_value = mock_yt_inst
+
+        mock_oai_inst = MagicMock()
+        mock_oai_inst.get_recent_articles.side_effect = [[], oai]
+        mock_oai_cls.return_value.__enter__.return_value = mock_oai_inst
+
+        mock_ant_inst = MagicMock()
+        mock_ant_inst.get_articles.side_effect = [[], ant]
+        mock_ant_cls.return_value.__enter__.return_value = mock_ant_inst
+
+        with AggregationRunner() as runner:
+            res = runner.run(hours_back=24, sync_to_db=False, expand_if_empty=True)
+
+        assert res.hours_back == 168
+        assert res.total_items == 3
+

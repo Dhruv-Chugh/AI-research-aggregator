@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import html
 import logging
+import os
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
@@ -49,13 +50,22 @@ class ArticleContentExtractor:
         "Pragma": "no-cache",
     }
 
-    def __init__(self, client: Optional[httpx.Client] = None, timeout: float = 15.0) -> None:
+    def __init__(
+        self,
+        client: Optional[httpx.Client] = None,
+        timeout: float = 15.0,
+        enable_reader_fallback: Optional[bool] = None,
+    ) -> None:
         self._owns_client = client is None
         self.client = client or httpx.Client(
             timeout=timeout,
             headers=self.DEFAULT_HEADERS,
             follow_redirects=True,
         )
+        if enable_reader_fallback is not None:
+            self.enable_reader_fallback = enable_reader_fallback
+        else:
+            self.enable_reader_fallback = os.getenv("ENABLE_READER_FALLBACK", "true").lower() in ("true", "1", "yes")
 
     def __enter__(self) -> ArticleContentExtractor:
         return self
@@ -68,6 +78,45 @@ class ArticleContentExtractor:
         if self._owns_client:
             self.client.close()
 
+    def _fetch_via_reader(self, url: str) -> ExtractedContent:
+        """Fallback to Jina Reader Markdown extraction when IPs hit HTTP 403/429."""
+        reader_url = f"https://r.jina.ai/{url}"
+        try:
+            resp = self.client.get(reader_url, headers={"Accept": "text/markdown"})
+            if resp.status_code != 200:
+                return ExtractedContent(
+                    url=url,
+                    success=False,
+                    error_message=f"Reader fallback HTTP {resp.status_code}",
+                )
+
+            raw_text = (resp.text or "").strip()
+            title: Optional[str] = None
+            markdown_body = raw_text
+
+            if "Markdown Content:" in raw_text:
+                header_part, body_part = raw_text.split("Markdown Content:", 1)
+                markdown_body = body_part.strip()
+                for line in header_part.splitlines():
+                    if line.startswith("Title:"):
+                        title = line.removeprefix("Title:").strip() or None
+                        break
+
+            plain_text = " ".join(markdown_body.split())
+            words = len(plain_text.split())
+            return ExtractedContent(
+                url=url,
+                title=title,
+                markdown=markdown_body,
+                text=plain_text,
+                word_count=words,
+                success=bool(words > 0),
+                error_message=None if words > 0 else "Reader fallback returned empty content",
+            )
+        except Exception as e:
+            logger.warning("Reader fallback failed for %s: %s", url, e)
+            return ExtractedContent(url=url, success=False, error_message=str(e))
+
     def fetch_content(self, url: str) -> ExtractedContent:
         """Fetch article web page and parse full content according to the domain."""
         logger.debug("Fetching article content from: %s", url)
@@ -75,6 +124,15 @@ class ArticleContentExtractor:
         try:
             response = self.client.get(url)
             if response.status_code != 200:
+                if response.status_code in (403, 429) and self.enable_reader_fallback:
+                    logger.info(
+                        "HTTP %d for %s; attempting reader fallback extraction...",
+                        response.status_code,
+                        url,
+                    )
+                    fallback = self._fetch_via_reader(url)
+                    if fallback.success:
+                        return fallback
                 logger.warning("HTTP %d when fetching article from %s", response.status_code, url)
                 return ExtractedContent(
                     url=url,

@@ -205,7 +205,7 @@ class AggregationRunner:
             if not check_connection():
                 logger.info(
                     "Database offline: Scraped items not persisted. "
-                    "Start PostgreSQL with 'docker compose up -d' to enable database persistence."
+                    "Start PostgreSQL with 'docker start ai_news_postgres' or 'docker compose up -d postgres'."
                 )
                 stats["offline"] = True
                 return stats
@@ -219,34 +219,16 @@ class AggregationRunner:
 
         return stats
 
-    def run(
+    def _scrape_sources(
         self,
-        hours_back: Optional[int] = DEFAULT_LOOKBACK_HOURS,
-        hours: Optional[int] = None,
-        include_youtube: bool = True,
-        include_openai: bool = True,
-        include_anthropic: bool = True,
-        fetch_transcripts: bool = True,
-        fetch_full_content: bool = True,
-        sync_to_db: bool = True,
-        db_repo: Optional[NewsRepository] = None,
-        summarize: bool = False,
-        rank: bool = False,
-        email_briefing: bool = False,
-        send_live_email: bool = False,
-        force_summarize: bool = False,
-        provider: str = "gemini",
-        max_per_source: int = 2,
-    ) -> AggregationResult:
-        """Execute unified ingestion across active sources and sync to database."""
-        eff_hours = hours if hours is not None else hours_back
-        actual_hours = eff_hours if (eff_hours and eff_hours > 0) else None
-        cutoff = (
-            datetime.now(timezone.utc) - timedelta(hours=actual_hours)
-            if actual_hours
-            else None
-        )
-
+        actual_hours: Optional[int],
+        include_youtube: bool,
+        include_openai: bool,
+        include_anthropic: bool,
+        fetch_transcripts: bool,
+        fetch_full_content: bool,
+    ) -> tuple[List[YouTubeVideo], List[OpenAIArticle], List[AnthropicArticle], List[str]]:
+        """Execute enabled source scrapers for the specified lookback window."""
         videos: List[YouTubeVideo] = []
         openai_articles: List[OpenAIArticle] = []
         anthropic_articles: List[AnthropicArticle] = []
@@ -290,6 +272,65 @@ class AggregationRunner:
                 msg = f"Anthropic aggregation failed: {e}"
                 logger.error(msg)
                 warnings.append(msg)
+
+        return videos, openai_articles, anthropic_articles, warnings
+
+    def run(
+        self,
+        hours_back: Optional[int] = DEFAULT_LOOKBACK_HOURS,
+        hours: Optional[int] = None,
+        include_youtube: bool = True,
+        include_openai: bool = True,
+        include_anthropic: bool = True,
+        fetch_transcripts: bool = True,
+        fetch_full_content: bool = True,
+        sync_to_db: bool = True,
+        db_repo: Optional[NewsRepository] = None,
+        summarize: bool = False,
+        rank: bool = False,
+        email_briefing: bool = False,
+        send_live_email: bool = False,
+        force_summarize: bool = False,
+        provider: str = "gemini",
+        max_per_source: int = 2,
+        expand_if_empty: bool = False,
+    ) -> AggregationResult:
+        """Execute unified ingestion across active sources and sync to database."""
+        eff_hours = hours if hours is not None else hours_back
+        actual_hours = eff_hours if (eff_hours and eff_hours > 0) else None
+        cutoff = (
+            datetime.now(timezone.utc) - timedelta(hours=actual_hours)
+            if actual_hours
+            else None
+        )
+
+        videos, openai_articles, anthropic_articles, warnings = self._scrape_sources(
+            actual_hours=actual_hours,
+            include_youtube=include_youtube,
+            include_openai=include_openai,
+            include_anthropic=include_anthropic,
+            fetch_transcripts=fetch_transcripts,
+            fetch_full_content=fetch_full_content,
+        )
+
+        # Automatically widen quiet short windows (<=48h) to 7 days when requested by end-to-end pipelines
+        if expand_if_empty and actual_hours is not None and 0 < actual_hours <= 48:
+            if not (videos or openai_articles or anthropic_articles):
+                logger.info(
+                    "0 items discovered in %dh window. Expanding lookback to 168 hours (7 days)...",
+                    actual_hours,
+                )
+                actual_hours = 168
+                cutoff = datetime.now(timezone.utc) - timedelta(hours=actual_hours)
+                videos, openai_articles, anthropic_articles, expanded_warnings = self._scrape_sources(
+                    actual_hours=actual_hours,
+                    include_youtube=include_youtube,
+                    include_openai=include_openai,
+                    include_anthropic=include_anthropic,
+                    fetch_transcripts=fetch_transcripts,
+                    fetch_full_content=fetch_full_content,
+                )
+                warnings.extend(expanded_warnings)
 
         # 4. Sync to Database
         db_synced = False
@@ -338,7 +379,10 @@ class AggregationRunner:
 
                 logger.info("Executing personalized user interest ranking pipeline (provider=%s)...", provider)
                 with UserRankingAgent(preferred_provider=provider) as ranking_agent:
-                    rank_rep = ranking_agent.run_daily_ranking(max_per_source=max_per_source)
+                    rank_rep = ranking_agent.run_daily_ranking(
+                        hours=actual_hours or 168,
+                        max_per_source=max_per_source,
+                    )
                     rankings_created = rank_rep.rankings_stored
                     logger.info("Persisted %d personalized rankings into 'user_digest_rankings'.", rank_rep.rankings_stored)
             except Exception as e:
@@ -406,6 +450,7 @@ def run_news_aggregation(
     force_summarize: bool = False,
     provider: str = "gemini",
     max_per_source: int = 2,
+    expand_if_empty: bool = False,
 ) -> AggregationResult:
     """Streamlined function to run the complete pipeline in one call."""
     effective_hours = hours if hours is not None else hours_back
@@ -426,6 +471,7 @@ def run_news_aggregation(
             force_summarize=force_summarize,
             provider=provider,
             max_per_source=max_per_source,
+            expand_if_empty=expand_if_empty,
         )
 
 
@@ -531,7 +577,7 @@ def main() -> None:
     # 0. Output LLM Markdown on demand
     if args.llm_markdown:
         if not check_connection():
-            print("❌ Database is not reachable. (Run 'docker compose up -d' first)\n")
+            print("❌ Database is not reachable. (Start PostgreSQL: 'docker start ai_news_postgres' or 'docker compose up -d postgres')\n")
             return
         from app.services.llm_formatter import get_database_llm_markdown
 
@@ -543,7 +589,7 @@ def main() -> None:
     if args.clean_shorts:
         print("\n🧹 Scanning and removing YouTube Shorts from database...")
         if not check_connection():
-            print("❌ Database is not reachable. (Run 'docker compose up -d' first)\n")
+            print("❌ Database is not reachable. (Start PostgreSQL: 'docker start ai_news_postgres' or 'docker compose up -d postgres')\n")
             return
         with NewsRepository() as repo:
             removed = repo.remove_shorts()
@@ -594,6 +640,7 @@ def main() -> None:
         force_summarize=args.force_summarize,
         provider=args.provider,
         max_per_source=args.max_per_source,
+        expand_if_empty=args.full_pipeline,
     )
     result.print_summary()
 

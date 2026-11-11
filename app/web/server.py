@@ -28,6 +28,7 @@ if sys.platform.startswith("win"):
 import json
 import logging
 import os
+import socket
 import threading
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -68,10 +69,34 @@ _pipeline_state: Dict[str, Any] = {
     "briefings_delivered": 0,
 }
 
+DEFAULT_PLACEHOLDER_EMAIL = "subscriber@example.com"
+DEFAULT_PLACEHOLDER_NAME = "AI Research Subscriber"
+
+
+def _should_mask_public_pii() -> bool:
+    """Return True in Render cloud deployments (or when MASK_PUBLIC_PII=true) to redact PII."""
+    explicit = os.getenv("MASK_PUBLIC_PII", "").strip().lower()
+    if explicit in ("true", "1", "yes"):
+        return True
+    if explicit in ("false", "0", "no"):
+        return False
+    return os.getenv("RENDER", "").strip().lower() in ("true", "1", "yes")
+
+
+def _mask_email(email: str) -> str:
+    """Redact local-part of an email address for public portal responses."""
+    raw = (email or "").strip()
+    if not raw or "@" not in raw:
+        return ""
+    local, domain = raw.split("@", 1)
+    prefix = local[0] if local else "*"
+    return f"{prefix}***@{domain}"
+
+
 # Default subscriber preferences
 DEFAULT_SUBSCRIBER = {
-    "email": os.getenv("RECIPIENT_EMAIL", "dhruvchugh2007@gmail.com"),
-    "name": os.getenv("SUBSCRIBER_NAME", "Dhruv Chugh"),
+    "email": os.getenv("RECIPIENT_EMAIL", DEFAULT_PLACEHOLDER_EMAIL),
+    "name": os.getenv("SUBSCRIBER_NAME", DEFAULT_PLACEHOLDER_NAME),
     "is_active": True,
     "bio_or_role": "AI Software Architect & Researcher",
     "expertise_level": "advanced",
@@ -111,13 +136,13 @@ def load_local_preferences() -> Dict[str, Any]:
     if env_email:
         merged["email"] = env_email
     elif not merged.get("email"):
-        merged["email"] = "dhruvchugh2007@gmail.com"
+        merged["email"] = DEFAULT_PLACEHOLDER_EMAIL
 
     env_name = os.getenv("SUBSCRIBER_NAME", "").strip()
     if env_name:
         merged["name"] = env_name
     elif not merged.get("name"):
-        merged["name"] = "Dhruv Chugh"
+        merged["name"] = DEFAULT_PLACEHOLDER_NAME
 
     return merged
 
@@ -285,14 +310,16 @@ def sync_subscriber_to_db(prefs: Dict[str, Any]) -> bool:
             return False
 
         with get_db_session() as session:
-            email = prefs.get("email", DEFAULT_SUBSCRIBER["email"]).strip().lower()
+            email = (prefs.get("email") or DEFAULT_SUBSCRIBER["email"]).strip().lower()
             if not email:
                 return False
             stmt = select(Subscriber).where(Subscriber.email == email)
             subscriber = session.execute(stmt).scalar_one_or_none()
+            incoming_name = (prefs.get("name") or "").strip()
 
             if subscriber:
-                subscriber.name = prefs.get("name")
+                if incoming_name and (incoming_name != DEFAULT_PLACEHOLDER_NAME or not subscriber.name):
+                    subscriber.name = incoming_name
                 subscriber.is_active = prefs.get("is_active", True)
                 subscriber.bio_or_role = prefs.get("bio_or_role")
                 subscriber.expertise_level = prefs.get("expertise_level", "advanced")
@@ -409,7 +436,7 @@ async def healthcheck():
     return {"status": "ok", "service": "axiom-dispatch"}
 
 
-@app.get("/", response_class=HTMLResponse)
+@app.api_route("/", methods=["GET", "HEAD"], response_class=HTMLResponse)
 async def serve_form_ui():
     """Serve the single-page Google/Microsoft Forms styled interface."""
     if not INDEX_HTML_PATH.exists():
@@ -463,6 +490,11 @@ async def get_full_configuration():
     else:
         active_yt = [c.model_dump() for c in sources_cfg.youtube_channels]
 
+    response_subscriber = dict(subscriber_data)
+    if _should_mask_public_pii():
+        response_subscriber["email"] = _mask_email(str(response_subscriber.get("email", "")))
+        response_subscriber["name"] = ""
+
     return {
         "status": "success",
         "system": {
@@ -476,7 +508,7 @@ async def get_full_configuration():
             "openai": sources_cfg.openai.model_dump(),
             "anthropic": sources_cfg.anthropic.model_dump(),
         },
-        "subscriber": subscriber_data,
+        "subscriber": response_subscriber,
     }
 
 
@@ -484,14 +516,29 @@ async def get_full_configuration():
 async def save_configuration(payload: UpdatePreferencesRequest):
     """Save updated subscriber preferences and pipeline settings."""
     prefs = payload.model_dump()
+    existing = load_local_preferences()
+
+    submitted_email = (prefs.get("email") or "").strip()
+    if not submitted_email or "*" in submitted_email:
+        prefs["email"] = existing.get("email", DEFAULT_PLACEHOLDER_EMAIL)
+
+    submitted_name = (prefs.get("name") or "").strip()
+    if not submitted_name:
+        prefs["name"] = existing.get("name", DEFAULT_PLACEHOLDER_NAME)
+
     save_local_preferences(prefs)
     db_synced = sync_subscriber_to_db(prefs)
+
+    response_prefs = dict(prefs)
+    if _should_mask_public_pii():
+        response_prefs["email"] = _mask_email(str(response_prefs.get("email", "")))
+        response_prefs["name"] = ""
 
     return {
         "status": "success",
         "message": "Preferences saved successfully.",
         "db_synced": db_synced,
-        "subscriber": prefs,
+        "subscriber": response_prefs,
     }
 
 
@@ -760,6 +807,49 @@ async def get_system_status():
     }
 
 
+def _is_port_in_use(host: str, port: int) -> bool:
+    """Return True if TCP port is already accepting connections or cannot be bound exclusively."""
+    probe_host = "127.0.0.1" if host in ("0.0.0.0", "::", "") else host
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        probe.settimeout(0.3)
+        if probe.connect_ex((probe_host, port)) == 0:
+            return True
+
+    bind_host = host or "0.0.0.0"
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as binder:
+        if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+            binder.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        try:
+            binder.bind((bind_host, port))
+            return False
+        except OSError:
+            return True
+
+
+def _select_available_port(
+    host: str,
+    preferred_port: int,
+    strict: bool = False,
+    max_attempts: int = 11,
+) -> int:
+    """Return preferred_port if free, or scan nearby ports when auto-fallback is enabled."""
+    if strict:
+        if _is_port_in_use(host, preferred_port):
+            raise RuntimeError(f"Port {preferred_port} is already in use and STRICT_PORT/explicit port is enabled.")
+        return preferred_port
+
+    for offset in range(max_attempts):
+        candidate = preferred_port + offset
+        if not _is_port_in_use(host, candidate):
+            if offset > 0:
+                logger.warning("Port %d is busy; auto-selected free local port %d.", preferred_port, candidate)
+            return candidate
+
+    raise RuntimeError(
+        f"All candidate ports {preferred_port}-{preferred_port + max_attempts - 1} are in use."
+    )
+
+
 def start(
     host: Optional[str] = None,
     port: Optional[int] = None,
@@ -769,12 +859,18 @@ def start(
     import uvicorn
 
     target_host = host or os.getenv("HOST", "0.0.0.0")
-    target_port = port or int(os.getenv("PORT", 8000))
+    preferred_port = port or int(os.getenv("PORT", 8000))
+    strict_port = port is not None or os.getenv("STRICT_PORT", "false").lower() in ("true", "1", "yes")
+    target_port = _select_available_port(target_host, preferred_port, strict=strict_port)
     sched_flag = os.getenv("ENABLE_SCHEDULER", "true")
+    browser_host = "127.0.0.1" if target_host in ("0.0.0.0", "::") else target_host
 
     print(f"\n" + "=" * 65)
     print(f"🚀 Axiom Dispatch — Cloud Production Portal & 24h Scheduler")
-    print(f"   Listening on: http://{target_host}:{target_port}")
+    if target_port != preferred_port:
+        print(f"   ⚠️ Port {preferred_port} was busy; switched automatically to port {target_port}")
+    print(f"   Local UI:  http://{browser_host}:{target_port}")
+    print(f"   Binding:   http://{target_host}:{target_port}")
     print(f"   Scheduler: {'Active (every 24h)' if sched_flag.lower() in ('true', '1') else 'Disabled'}")
     print(f"   Database: {'Configured via DATABASE_URL' if os.getenv('DATABASE_URL') else 'Local Fallback'}")
     print(f"=" * 65 + "\n")

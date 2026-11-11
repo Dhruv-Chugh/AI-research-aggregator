@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 import os
 import smtplib
+import ssl
 from datetime import date, datetime
 from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
@@ -49,6 +50,9 @@ class EmailService:
         smtp_password: Optional[str] = None,
         sender_name: str = "The AI Dispatch",
         sender_email: Optional[str] = None,
+        resend_api_key: Optional[str] = None,
+        resend_from_email: Optional[str] = None,
+        smtp_timeout: int = 20,
     ) -> None:
         self.smtp_host = smtp_host or os.getenv("SMTP_HOST", "smtp.gmail.com")
         self.smtp_port = int(smtp_port or os.getenv("SMTP_PORT", "587"))
@@ -56,11 +60,192 @@ class EmailService:
         self.smtp_password = smtp_password or os.getenv("SMTP_PASSWORD", "")
         self.sender_name = sender_name
         self.sender_email = sender_email or self.smtp_user or "ai-news@digest.internal"
+        self.smtp_timeout = int(smtp_timeout)
+        self.resend_api_key = (
+            resend_api_key if resend_api_key is not None else os.getenv("RESEND_API_KEY", "")
+        ).strip()
+        default_resend_from = f"{sender_name} <onboarding@resend.dev>"
+        self.resend_from_email = (
+            resend_from_email
+            if resend_from_email is not None
+            else os.getenv("RESEND_FROM_EMAIL", default_resend_from)
+        ).strip() or default_resend_from
+
+    @property
+    def has_smtp_credentials(self) -> bool:
+        """Check if live SMTP credentials are configured."""
+        return bool(self.smtp_user and self.smtp_password and len(self.smtp_password.strip()) > 3)
+
+    @property
+    def has_resend(self) -> bool:
+        """Check if a Resend HTTPS API key is configured as a fallback transport."""
+        return len(self.resend_api_key) > 3
 
     @property
     def has_credentials(self) -> bool:
-        """Check if live SMTP credentials are configured."""
-        return bool(self.smtp_user and self.smtp_password and len(self.smtp_password.strip()) > 3)
+        """Check if live email transport (SMTP or Resend fallback) is configured."""
+        return self.has_smtp_credentials or self.has_resend
+
+    @staticmethod
+    def _is_smtp_auth_error(err: Exception) -> bool:
+        """Identify credential/security gate errors where switching SMTP port will not help."""
+        if isinstance(err, smtplib.SMTPAuthenticationError):
+            return True
+        err_str = str(err)
+        return any(
+            tok in err_str
+            for tok in ("534", "535", "WebLoginRequired", "BadCredentials", "Connection unexpectedly closed")
+        )
+
+    @staticmethod
+    def _format_smtp_error(err: Exception) -> str:
+        """Format actionable SMTP diagnostics for Gmail auth checks and general failures."""
+        err_str = str(err)
+        if "534" in err_str or "WebLoginRequired" in err_str:
+            hint = (
+                "\n💡 Note: Google has temporarily gated SMTP access with 'WebLoginRequired'.\n"
+                "To unlock it immediately in 10 seconds:\n"
+                "1. Open https://accounts.google.com/DisplayUnlockCaptcha in your browser while signed into your sender Gmail account and click 'Continue'.\n"
+                "2. Or generate a fresh 16-character App Password at https://myaccount.google.com/apppasswords and update SMTP_PASSWORD in .env."
+            )
+            return f"SMTP security verification required (534 WebLoginRequired): {err}.{hint}"
+        if "535" in err_str or "BadCredentials" in err_str or "Connection unexpectedly closed" in err_str:
+            hint = (
+                "\n💡 Note: Gmail requires a 16-character 'App Password' instead of your standard account password.\n"
+                "To generate one in 30 seconds:\n"
+                "1. Open https://myaccount.google.com/apppasswords\n"
+                "2. Name it 'AI News Aggregator' and click Create.\n"
+                "3. Copy the 16-character code (e.g. 'abcd efgh ijkl mnop') and update SMTP_PASSWORD in .env.\n"
+                "4. If already generated, visit https://accounts.google.com/DisplayUnlockCaptcha to authorize access."
+            )
+            return f"SMTP authentication failed (Gmail BadCredentials/WebLoginRequired): {err}.{hint}"
+        return f"SMTP dispatch failed: {err}"
+
+    def _candidate_smtp_ports(self) -> List[int]:
+        """Return ordered unique SMTP ports (`587 <-> 465` automatic fallback)."""
+        alternate = 465 if self.smtp_port != 465 else 587
+        return list(dict.fromkeys([self.smtp_port, alternate]))
+
+    def _send_via_smtp_port(self, port: int, clean_password: str, msg: MIMEMultipart) -> None:
+        """Connect, authenticate, and send MIME message over a single SMTP port."""
+        tls_context = ssl.create_default_context()
+        logger.info("Connecting to SMTP server: %s:%d...", self.smtp_host, port)
+        if port == 465:
+            server = smtplib.SMTP_SSL(
+                self.smtp_host,
+                port,
+                timeout=self.smtp_timeout,
+                context=tls_context,
+            )
+        else:
+            server = smtplib.SMTP(self.smtp_host, port, timeout=self.smtp_timeout)
+            server.ehlo()
+            server.starttls(context=tls_context)
+            server.ehlo()
+
+        try:
+            server.login(self.smtp_user, clean_password)
+            server.send_message(msg)
+            server.quit()
+        finally:
+            try:
+                server.close()
+            except Exception:
+                pass
+
+    def _send_via_resend(
+        self,
+        recipient_email: str,
+        subject: str,
+        html_body: str,
+        plain_text: str,
+        pdf_filename: str,
+        pdf_bytes: bytes,
+    ) -> str:
+        """Deliver briefing email over HTTPS (port 443) via the Resend SDK."""
+        import resend
+
+        resend.api_key = self.resend_api_key
+        params: resend.Emails.SendParams = {
+            "from": self.resend_from_email,
+            "to": [recipient_email],
+            "subject": subject,
+            "html": html_body,
+            "text": plain_text,
+            "attachments": [
+                {
+                    "filename": pdf_filename,
+                    "content": list(pdf_bytes),
+                    "content_type": "application/pdf",
+                }
+            ],
+        }
+        response = resend.Emails.send(params)
+        if isinstance(response, dict):
+            return str(response.get("id", "unknown"))
+        return str(getattr(response, "id", "unknown"))
+
+    def _dispatch_via_resend(
+        self,
+        recipient_email: str,
+        subject: str,
+        html_body: str,
+        plain_text: str,
+        pdf_filename: str,
+        pdf_bytes: bytes,
+        html_export_path: str,
+        pdf_export_path: str,
+        prior_error: Optional[str] = None,
+    ) -> EmailSendResult:
+        """Execute Resend HTTPS delivery and wrap success or error in EmailSendResult."""
+        try:
+            logger.info(
+                "Sending briefing via Resend HTTPS API (443) from %s to %s...",
+                self.resend_from_email,
+                recipient_email,
+            )
+            email_id = self._send_via_resend(
+                recipient_email=recipient_email,
+                subject=subject,
+                html_body=html_body,
+                plain_text=plain_text,
+                pdf_filename=pdf_filename,
+                pdf_bytes=pdf_bytes,
+            )
+            logger.info(
+                "✅ Live email successfully sent via Resend (id=%s) to: %s with attachment %s",
+                email_id,
+                recipient_email,
+                pdf_filename,
+            )
+            return EmailSendResult(
+                success=True,
+                recipient=recipient_email,
+                subject=subject,
+                pdf_filename=pdf_filename,
+                pdf_bytes_count=len(pdf_bytes),
+                sent_live=True,
+                html_export_path=html_export_path,
+                pdf_export_path=pdf_export_path,
+            )
+        except Exception as resend_err:
+            err_msg = (
+                f"{prior_error}; Resend HTTPS fallback failed: {resend_err}"
+                if prior_error
+                else f"Resend API error sending to {recipient_email}: {resend_err}"
+            )
+            logger.error("❌ %s", err_msg)
+            return EmailSendResult(
+                success=False,
+                recipient=recipient_email,
+                subject=subject,
+                pdf_filename=pdf_filename,
+                pdf_bytes_count=len(pdf_bytes),
+                sent_live=False,
+                html_export_path=html_export_path,
+                pdf_export_path=pdf_export_path,
+                error_message=err_msg,
+            )
 
     def render_html_body(
         self,
@@ -377,81 +562,96 @@ class EmailService:
         with open(html_export_path, "w", encoding="utf-8") as f:
             f.write(html_body)
 
-        # Live SMTP delivery if requested and configured
-        if send_live and self.has_credentials:
-            try:
-                # Strip spaces if user pasted 16-character app password formatted as 'xxxx xxxx xxxx xxxx'
-                clean_password = self.smtp_password.replace(" ", "")
-                logger.info("Connecting to SMTP server: %s:%d...", self.smtp_host, self.smtp_port)
+        # Primary live delivery: Gmail SMTP with automatic port fallback (587 <-> 465)
+        if send_live and self.has_smtp_credentials:
+            clean_password = self.smtp_password.replace(" ", "")
+            ports = self._candidate_smtp_ports()
+            smtp_errors: List[str] = []
+            auth_failed = False
 
-                if self.smtp_port == 465:
-                    server = smtplib.SMTP_SSL(self.smtp_host, self.smtp_port, timeout=20)
-                else:
-                    server = smtplib.SMTP(self.smtp_host, self.smtp_port, timeout=20)
-                    server.ehlo()
-                    server.starttls()
-                    server.ehlo()
-
+            for idx, port in enumerate(ports):
                 try:
-                    server.login(self.smtp_user, clean_password)
-                    server.send_message(msg)
-                    server.quit()
-                finally:
-                    try:
-                        server.close()
-                    except Exception:
-                        pass
+                    self._send_via_smtp_port(port, clean_password, msg)
+                    logger.info(
+                        "✅ Live email successfully sent via SMTP (%s:%d) to: %s with attachment %s",
+                        self.smtp_host,
+                        port,
+                        recipient_email,
+                        pdf_filename,
+                    )
+                    return EmailSendResult(
+                        success=True,
+                        recipient=recipient_email,
+                        subject=subject,
+                        pdf_filename=pdf_filename,
+                        pdf_bytes_count=len(pdf_bytes),
+                        sent_live=True,
+                        html_export_path=html_export_path,
+                        pdf_export_path=pdf_export_path,
+                    )
+                except Exception as e:
+                    if self._is_smtp_auth_error(e):
+                        auth_failed = True
+                        smtp_errors.append(self._format_smtp_error(e))
+                        break
+                    smtp_errors.append(f"port {port}: {e}")
+                    if idx + 1 < len(ports):
+                        logger.warning(
+                            "SMTP port %d failed (%s). Failing over to port %d...",
+                            port,
+                            e,
+                            ports[idx + 1],
+                        )
 
-                logger.info("✅ Live email successfully sent to: %s with attachment %s", recipient_email, pdf_filename)
-                return EmailSendResult(
-                    success=True,
-                    recipient=recipient_email,
+            combined_smtp_err = "; ".join(smtp_errors) if len(smtp_errors) > 1 else smtp_errors[0]
+
+            # Automatic HTTPS (443) Resend fallback if SMTP ports are blocked/unreachable
+            if not auth_failed and self.has_resend:
+                logger.warning(
+                    "All SMTP ports failed (%s). Failing over to Resend HTTPS (443)...",
+                    combined_smtp_err,
+                )
+                return self._dispatch_via_resend(
+                    recipient_email=recipient_email,
                     subject=subject,
+                    html_body=html_body,
+                    plain_text=plain_text,
                     pdf_filename=pdf_filename,
-                    pdf_bytes_count=len(pdf_bytes),
-                    sent_live=True,
+                    pdf_bytes=pdf_bytes,
                     html_export_path=html_export_path,
                     pdf_export_path=pdf_export_path,
+                    prior_error=combined_smtp_err,
                 )
-            except Exception as e:
-                err_str = str(e)
-                if "534" in err_str or "WebLoginRequired" in err_str:
-                    hint = (
-                        "\n💡 Note: Google has temporarily gated SMTP access with 'WebLoginRequired'.\n"
-                        "To unlock it immediately in 10 seconds:\n"
-                        "1. Open https://accounts.google.com/DisplayUnlockCaptcha in your browser while signed into your sender Gmail account and click 'Continue'.\n"
-                        "2. Or generate a fresh 16-character App Password at https://myaccount.google.com/apppasswords and update SMTP_PASSWORD in .env."
-                    )
-                    err_msg = f"SMTP security verification required (534 WebLoginRequired): {e}.{hint}"
-                elif "535" in err_str or "BadCredentials" in err_str or "Connection unexpectedly closed" in err_str:
-                    hint = (
-                        "\n💡 Note: Gmail requires a 16-character 'App Password' instead of your standard account password.\n"
-                        "To generate one in 30 seconds:\n"
-                        "1. Open https://myaccount.google.com/apppasswords\n"
-                        "2. Name it 'AI News Aggregator' and click Create.\n"
-                        "3. Copy the 16-character code (e.g. 'abcd efgh ijkl mnop') and update SMTP_PASSWORD in .env.\n"
-                        "4. If already generated, visit https://accounts.google.com/DisplayUnlockCaptcha to authorize access."
-                    )
-                    err_msg = f"SMTP authentication failed (Gmail BadCredentials/WebLoginRequired): {e}.{hint}"
-                else:
-                    err_msg = f"SMTP dispatch failed: {e}"
 
-                logger.error(err_msg)
-                return EmailSendResult(
-                    success=False,
-                    recipient=recipient_email,
-                    subject=subject,
-                    pdf_filename=pdf_filename,
-                    pdf_bytes_count=len(pdf_bytes),
-                    sent_live=False,
-                    html_export_path=html_export_path,
-                    pdf_export_path=pdf_export_path,
-                    error_message=err_msg,
-                )
+            logger.error(combined_smtp_err)
+            return EmailSendResult(
+                success=False,
+                recipient=recipient_email,
+                subject=subject,
+                pdf_filename=pdf_filename,
+                pdf_bytes_count=len(pdf_bytes),
+                sent_live=False,
+                html_export_path=html_export_path,
+                pdf_export_path=pdf_export_path,
+                error_message=combined_smtp_err,
+            )
+
+        # Fallback HTTPS transport if only RESEND_API_KEY is configured locally
+        if send_live and self.has_resend:
+            return self._dispatch_via_resend(
+                recipient_email=recipient_email,
+                subject=subject,
+                html_body=html_body,
+                plain_text=plain_text,
+                pdf_filename=pdf_filename,
+                pdf_bytes=pdf_bytes,
+                html_export_path=html_export_path,
+                pdf_export_path=pdf_export_path,
+            )
 
         # Safe local export (dry run or credentials unconfigured)
         logger.info(
-            "📄 Briefing PDF and HTML preview exported to %s. (Set SMTP_USER/SMTP_PASSWORD in .env for live sending)",
+            "📄 Briefing PDF and HTML preview exported to %s. (Set SMTP_USER/SMTP_PASSWORD or RESEND_API_KEY in .env for live sending)",
             export_dir,
         )
         return EmailSendResult(

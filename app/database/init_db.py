@@ -79,8 +79,9 @@ def seed_initial_data(engine: Engine) -> None:
 
         # 2. Seed default subscriber
         import os
-        default_email = os.getenv("RECIPIENT_EMAIL", "dhruvchugh2007@gmail.com").strip().lower()
-        sub_name = os.getenv("SUBSCRIBER_NAME", "Dhruv Chugh").strip()
+        default_email = os.getenv("RECIPIENT_EMAIL", "subscriber@example.com").strip().lower()
+        env_sub_name = os.getenv("SUBSCRIBER_NAME", "").strip()
+        sub_name = env_sub_name or "AI Research Subscriber"
         if default_email:
             sub = repo.subscribers.get_by_email(default_email)
             if not sub:
@@ -91,7 +92,10 @@ def seed_initial_data(engine: Engine) -> None:
                 )
                 logger.info("Added default subscriber: %s", default_email)
             else:
-                sub.name = sub_name
+                if env_sub_name:
+                    sub.name = env_sub_name
+                elif not sub.name:
+                    sub.name = sub_name
                 sub.is_active = True
                 session.flush()
                 logger.info("Verified active subscriber: %s", default_email)

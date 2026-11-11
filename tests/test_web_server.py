@@ -50,6 +50,29 @@ def test_serve_form_ui():
     _run_async(_test())
 
 
+def test_root_head_method_allowed():
+    """Verify HEAD / returns 200 OK instead of 405."""
+    async def _test():
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.head("/")
+            assert response.status_code == 200
+
+    _run_async(_test())
+
+
+def test_select_available_port_skips_occupied_port(monkeypatch):
+    """Verify web launcher switches cleanly to next free port if 8000 is occupied."""
+    from app.web.server import _select_available_port
+
+    monkeypatch.setattr("app.web.server._is_port_in_use", lambda host, port: port == 8000)
+    assert _select_available_port("0.0.0.0", 8000) == 8001
+
+    with pytest.raises(RuntimeError, match="already in use"):
+        _select_available_port("0.0.0.0", 8000, strict=True)
+
+
+
 def test_get_configuration():
     """Verify GET /api/config returns complete sources and subscriber profile."""
     async def _test():
@@ -74,6 +97,7 @@ def test_update_preferences(tmp_path, monkeypatch):
     """Verify POST /api/config saves subscriber updates."""
     test_prefs_path = tmp_path / "test_prefs.json"
     monkeypatch.setattr("app.web.server.PREFERENCES_PATH", test_prefs_path)
+    monkeypatch.setattr("app.web.server.sync_subscriber_to_db", lambda prefs: False)
 
     payload = {
         "email": "test_engineer@example.com",
@@ -269,5 +293,44 @@ def test_trigger_pipeline_now_mocked(monkeypatch):
             data = response.json()
             assert data["status"] == "started"
             assert "Autonomous pipeline launched in background" in data["message"]
+
+    _run_async(_test())
+
+
+def test_public_pii_masking_in_cloud_mode(tmp_path, monkeypatch):
+    """Verify MASK_PUBLIC_PII redacts subscriber identity in GET /api/config while preserving email on save."""
+    test_prefs_path = tmp_path / "masked_prefs.json"
+    test_prefs_path.write_text(
+        json.dumps({"email": "private.user@example.com", "name": "Private User"}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("app.web.server.PREFERENCES_PATH", test_prefs_path)
+    monkeypatch.setattr("app.web.server.sync_subscriber_to_db", lambda prefs: False)
+    monkeypatch.setattr(
+        "app.web.server.get_db_status_and_subscriber",
+        lambda: (False, load_local_preferences(), 0, None),
+    )
+    monkeypatch.setenv("MASK_PUBLIC_PII", "true")
+    monkeypatch.setenv("RECIPIENT_EMAIL", "private.user@example.com")
+    monkeypatch.setenv("SUBSCRIBER_NAME", "Private User")
+
+    async def _test():
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            get_resp = await client.get("/api/config")
+            assert get_resp.status_code == 200
+            sub = get_resp.json()["subscriber"]
+            assert sub["email"] == "p***@example.com"
+            assert sub["name"] == ""
+
+            post_resp = await client.post(
+                "/api/config",
+                json={"email": "", "name": "", "is_active": True, "lookback_hours": 48},
+            )
+            assert post_resp.status_code == 200
+            saved = json.loads(test_prefs_path.read_text(encoding="utf-8"))
+            assert saved["email"] == "private.user@example.com"
+            assert saved["name"] == "Private User"
+            assert saved["lookback_hours"] == 48
 
     _run_async(_test())

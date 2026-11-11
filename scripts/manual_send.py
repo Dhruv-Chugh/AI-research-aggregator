@@ -2,12 +2,14 @@
 
 Reads digests and personalized rankings from PostgreSQL (or optionally runs a
 fresh scrape/summarize/rank cycle with --full) and delivers the Visual IEEE PDF
-and responsive HTML briefing live via Gmail SMTP.
+and responsive HTML briefing live via Gmail SMTP (587 -> 465) with automatic
+Resend HTTPS (443) fallback when SMTP ports are blocked.
 
 Usage:
-    uv run python scripts/manual_send.py                # Send latest Postgres briefing via SMTP
-    uv run python scripts/manual_send.py --full         # Scrape, summarize, rank & send via SMTP
-    uv run python scripts/manual_send.py --dry-run      # Generate HTML/PDF locally without SMTP
+    uv run python scripts/manual_send.py                # Send latest Postgres briefing live
+    uv run python scripts/manual_send.py --full         # Scrape, summarize, rank & send live
+    uv run python scripts/manual_send.py --preflight    # Verify DB, API keys & email ports
+    uv run python scripts/manual_send.py --dry-run      # Generate HTML/PDF locally only
 """
 
 from __future__ import annotations
@@ -15,8 +17,10 @@ from __future__ import annotations
 import argparse
 import logging
 import os
+import socket
 import sys
 from pathlib import Path
+from typing import Any, Dict
 
 from dotenv import load_dotenv
 
@@ -42,7 +46,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--email",
         type=str,
-        default=os.getenv("RECIPIENT_EMAIL", "dhruvchugh2007@gmail.com"),
+        default=os.getenv("RECIPIENT_EMAIL", "subscriber@example.com"),
         help="Target subscriber email address.",
     )
     parser.add_argument(
@@ -64,7 +68,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Export PDF and HTML locally without sending via SMTP.",
+        help="Export PDF and HTML locally without sending live email.",
+    )
+    parser.add_argument(
+        "--preflight",
+        action="store_true",
+        help="Check PostgreSQL, LLM keys, and outbound email ports without scraping or sending.",
     )
     parser.add_argument(
         "--export-dir",
@@ -73,6 +82,41 @@ def parse_args() -> argparse.Namespace:
         help="Directory to write generated PDF and HTML previews.",
     )
     return parser.parse_args()
+
+
+def _probe_tcp(host: str, port: int, timeout: float = 2.5) -> bool:
+    """Return True if outbound TCP connection to host:port succeeds within timeout."""
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
+def _run_preflight() -> Dict[str, Any]:
+    """Inspect local PostgreSQL, LLM API keys, and email transport ports."""
+    from app.database.session import check_connection, engine
+    from app.services.email_service import EmailService
+
+    db_ok = check_connection(engine)
+    email_svc = EmailService()
+    smtp_587_ok = _probe_tcp(email_svc.smtp_host, 587) if email_svc.has_smtp_credentials else False
+    smtp_465_ok = _probe_tcp(email_svc.smtp_host, 465) if email_svc.has_smtp_credentials else False
+    gemini_ok = bool(os.getenv("GEMINI_API_KEY", "").strip())
+    openai_ok = bool(os.getenv("OPENAI_API_KEY", "").strip())
+
+    return {
+        "db_ok": db_ok,
+        "db_url": engine.url.render_as_string(hide_password=True),
+        "gemini_ok": gemini_ok,
+        "openai_ok": openai_ok,
+        "smtp_configured": email_svc.has_smtp_credentials,
+        "smtp_host": email_svc.smtp_host,
+        "smtp_587_reachable": smtp_587_ok,
+        "smtp_465_reachable": smtp_465_ok,
+        "resend_configured": email_svc.has_resend,
+        "email_ready": smtp_587_ok or smtp_465_ok or email_svc.has_resend or email_svc.has_smtp_credentials,
+    }
 
 
 def _ensure_postgres_ready(recipient_email: str) -> bool:
@@ -84,7 +128,7 @@ def _ensure_postgres_ready(recipient_email: str) -> bool:
 
     if not check_connection(engine):
         logger.error(
-            "Cannot connect to database (%s). Ensure PostgreSQL is running (e.g. 'docker compose up -d').",
+            "Cannot connect to database (%s). Start PostgreSQL with 'docker start ai_news_postgres' or 'docker compose up -d postgres'.",
             engine.url.render_as_string(hide_password=True),
         )
         return False
@@ -100,7 +144,7 @@ def _ensure_postgres_ready(recipient_email: str) -> bool:
             logger.info("Seeding missing subscriber '%s' in PostgreSQL...", recipient_email)
             sub = repo.subscribers.create(
                 email=recipient_email,
-                name=os.getenv("SUBSCRIBER_NAME", "Dhruv Chugh"),
+                name=os.getenv("SUBSCRIBER_NAME", "AI Research Subscriber"),
                 bio_or_role="AI Software Architect & Researcher",
                 expertise_level="advanced",
                 interests=[
@@ -138,6 +182,22 @@ def main() -> int:
     target_email = args.email.strip().lower()
     email_filter = None if args.all else target_email
 
+    if args.preflight:
+        checks = _run_preflight()
+        print("\n" + "=" * 64)
+        print("LOCAL PIPELINE PREFLIGHT CHECK")
+        print("=" * 64)
+        print(f"PostgreSQL:   {'OK' if checks['db_ok'] else 'UNREACHABLE'} ({checks['db_url']})")
+        print(f"LLM Keys:     Gemini={'OK' if checks['gemini_ok'] else 'MISSING'} | OpenAI={'OK' if checks['openai_ok'] else 'MISSING'}")
+        print(
+            f"Gmail SMTP:   Creds={'OK' if checks['smtp_configured'] else 'MISSING'} | "
+            f"Port 587={'OPEN' if checks['smtp_587_reachable'] else 'BLOCKED/UNCHECKED'} | "
+            f"Port 465={'OPEN' if checks['smtp_465_reachable'] else 'BLOCKED/UNCHECKED'}"
+        )
+        print(f"Resend 443:   {'READY (HTTPS fallback available)' if checks['resend_configured'] else 'NOT SET'}")
+        print("=" * 64)
+        return 0 if checks["db_ok"] and (checks["gemini_ok"] or checks["openai_ok"]) and checks["email_ready"] else 1
+
     if not _ensure_postgres_ready(target_email):
         return 1
 
@@ -145,26 +205,32 @@ def main() -> int:
         from app.scrapers.runner import AggregationRunner
 
         logger.info("Running full AggregationRunner pipeline (hours=%d, send_live=%s)...", args.hours, send_live)
-        runner = AggregationRunner()
-        res = runner.run(
-            hours_back=args.hours,
-            include_youtube=True,
-            include_openai=True,
-            include_anthropic=True,
-            fetch_transcripts=True,
-            fetch_full_content=True,
-            sync_to_db=True,
-            summarize=True,
-            rank=True,
-            email_briefing=False,  # Handle targeted dispatch cleanly below
-            provider="gemini",
-        )
+        with AggregationRunner() as runner:
+            res = runner.run(
+                hours_back=args.hours,
+                include_youtube=True,
+                include_openai=True,
+                include_anthropic=True,
+                fetch_transcripts=True,
+                fetch_full_content=True,
+                sync_to_db=True,
+                summarize=True,
+                rank=True,
+                email_briefing=False,  # Handle targeted dispatch cleanly below
+                provider="gemini",
+                expand_if_empty=(args.hours <= 48),
+            )
         logger.info(
-            "Full scrape/summarize/rank done -> Articles synced: %d | Digests: %d | Rankings: %d",
+            "Full scrape/summarize/rank done (window=%sh) -> Scraped: %d | Articles synced: %d | Digests: %d | Rankings: %d",
+            res.hours_back,
+            res.total_items,
             res.db_items_saved,
             res.summaries_created,
             res.rankings_created,
         )
+        if res.warnings:
+            for warn in res.warnings:
+                logger.warning("Pipeline warning: %s", warn)
     else:
         # Ensure any un-summarized digests / missing rankings in Postgres are filled before sending
         from app.database.models import ArticleDigest, UserDigestRanking
