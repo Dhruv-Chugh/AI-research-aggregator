@@ -169,9 +169,14 @@ uv run python scripts/manual_send.py --preflight
 Run the entire pipeline from fresh web scraping to live Gmail/Resend delivery in **one command**:
 
 ```bash
-# Full end-to-end pipeline (Scrape -> PostgreSQL -> Summarize -> Rank -> IEEE PDF -> Live Email)
+# Full end-to-end pipeline for the configured recipient in .env
 uv run python scripts/manual_send.py --full
+
+# Full end-to-end pipeline sent directly to any custom recipient email address
+uv run python scripts/manual_send.py --full --email recipient@example.com
 ```
+
+> **How `--email` works:** When given `--email <address>`, the pipeline automatically verifies and registers that subscriber in PostgreSQL if they are not already enrolled, scores candidate research against their profile, builds a personalized IEEE A4 PDF, and delivers the briefing live to that inbox via Gmail SMTP (with automatic 587 -> 465 failover).
 
 Helpful variations:
 
@@ -179,16 +184,79 @@ Helpful variations:
 # Expand lookback window to 7 days (168 hours) if last 24h has few articles
 uv run python scripts/manual_send.py --full --hours 168
 
-# Re-send or deliver using briefings already stored in PostgreSQL (auto-fills missing summaries/rankings)
-uv run python scripts/manual_send.py
-
 # Preview locally only: saves HTML & PDF inside exports/briefings/ without sending an email
 uv run python scripts/manual_send.py --full --dry-run
 ```
 
 Every run exports archival copies of the compiled HTML email and A4 PDF report to `exports/briefings/` (gitignored).
 
-### Step 6: Customize Preferences via the Local Web Portal (Optional)
+### Step 6: Customize Sources & YouTube Preferences via JSON Files
+
+You can customize which YouTube channels are scraped and how video transcripts are prioritized in briefings using the two configuration files in the `config/` directory:
+
+#### 1. Managing Monitored YouTube Channels (`config/sources.json`)
+
+Monitored YouTube channels are defined in the `youtube_channels` array in [`config/sources.json`](config/sources.json):
+
+```json
+{
+  "youtube_channels": [
+    {
+      "name": "Two Minute Papers",
+      "channel_id": "UCbfYPyITQ-7l4upoX8nvctg",
+      "handle": "@TwoMinutePapers",
+      "url": "https://www.youtube.com/@TwoMinutePapers",
+      "is_active": true
+    },
+    {
+      "name": "Think School",
+      "channel_id": "UCKZozRVHRYsYHGEyNKuhhdA",
+      "handle": "@thinkschool",
+      "url": "https://www.youtube.com/@thinkschool",
+      "is_active": true
+    }
+  ]
+}
+```
+
+- **Adding a new channel:**
+  1. Find the channel's `channel_id` (starts with `UC`): Visit the YouTube channel page, view page source and search for `channel_id` (or check its RSS feed URL `https://www.youtube.com/feeds/videos.xml?channel_id=UC...`).
+  2. Add an entry with `name`, `channel_id`, `handle`, `url`, and `"is_active": true`.
+- **Enabling / Disabling a channel:** Set `"is_active": false` to temporarily mute a channel from scraping without deleting its configuration.
+- **Applying changes to PostgreSQL:** After editing `config/sources.json`, re-sync into the database with:
+  ```bash
+  uv run python -m app.database.init_db --seed
+  ```
+  *(Running `manual_send.py --full` or starting the portal also auto-syncs `sources.json` to PostgreSQL on startup.)*
+
+#### 2. Tuning YouTube Ranking & Filtering Preferences (`config/subscriber_preferences.json`)
+
+How YouTube video content is scored and presented in your briefing is configured in [`config/subscriber_preferences.json`](config/subscriber_preferences.json):
+
+```json
+{
+  "preferred_sources": [
+    "Anthropic",
+    "OpenAI",
+    "YouTube"
+  ],
+  "max_featured_per_source": 2,
+  "interests": [
+    "Autonomous Multi-Agent Systems",
+    "Inference Scaling & LLM Reasoning",
+    "Distributed Neural Architectures & Compute Scaling"
+  ],
+  "ranking_instructions": "Prioritize production architectures, open-weights releases, and practical implementation details. De-prioritize high-level corporate hype and financing rounds."
+}
+```
+
+- **`preferred_sources`**: Controls which sources are included in your personalized briefing. To exclude YouTube videos entirely, remove `"YouTube"` from the list.
+- **`max_featured_per_source`** (default `2`): Limits the maximum number of items from any single source type (e.g. YouTube) in the top **Tier 1: Featured Strategic Deep Dives**. This ensures high-frequency video channels do not crowd out research papers from Anthropic or OpenAI.
+- **`interests`**: The LLM extracts spoken transcripts from videos and computes a relevance score (0–100) by matching the content against your technical interest topics.
+- **`ranking_instructions`**: Direct prompt instructions passed to Gemini/OpenAI to guide scoring. You can tune this to prioritize specific video styles (e.g., *"Favor deep technical architecture walkthroughs over podcast banter"*).
+- **Applying changes:** Preferences are synced to PostgreSQL on startup of `uv run ai-form` or when saved through the local web portal.
+
+### Step 7: Customize Preferences via the Local Web Portal (Optional)
 
 Launch the FastAPI configuration portal (`http://127.0.0.1:8000`, automatically selecting `8001`–`8010` if `8000` is occupied) to add/remove YouTube channels, toggle OpenAI/Anthropic sources, tune ranking directives, or trigger runs visually:
 
@@ -203,8 +271,10 @@ uv run ai-form
 | Command | Purpose |
 |:---|:---|
 | `uv run python scripts/manual_send.py --preflight` | Check PostgreSQL, Gemini/OpenAI keys, SMTP ports `587`/`465`, and Resend readiness |
-| `uv run python scripts/manual_send.py --full --hours 168` | Complete end-to-end run: scrape, summarize, rank, build PDF, and send live email |
-| `uv run python scripts/manual_send.py` | Build PDF and send live email from existing PostgreSQL data |
+| `uv run python scripts/manual_send.py --full` | Full end-to-end pipeline: scrape, summarize, rank, build PDF, and send live email |
+| `uv run python scripts/manual_send.py --full --email <address>` | Full end-to-end pipeline targeting a specific recipient email address |
+| `uv run python scripts/manual_send.py --full --hours 168` | Full end-to-end pipeline expanded to a 7-day lookback window |
+| `uv run python -m app.database.init_db --seed` | Sync updated YouTube channels from `config/sources.json` to PostgreSQL |
 | `uv run python -m app.scrapers.runner` | Ingest new YouTube transcripts and OpenAI/Anthropic articles into PostgreSQL |
 | `uv run python -m app.agent.summarizer` | Summarize unsummarized PostgreSQL articles into table `digest` |
 | `uv run python -m app.agent.ranking_agent --run-now` | Score and rank digests into table `user_digest_rankings` |

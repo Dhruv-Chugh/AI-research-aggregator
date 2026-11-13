@@ -28,10 +28,9 @@ COPY pyproject.toml uv.lock ./
 # Install third-party production dependencies
 RUN uv sync --frozen --no-dev --no-install-project
 
-# Copy application source code, package sources, configurations, and scripts
+# Copy application source code, package sources, and configurations
 COPY app/ app/
 COPY config/ config/
-COPY scripts/ scripts/
 COPY src/ src/
 COPY README.md ./
 
